@@ -31,3 +31,12 @@ export {
   type ProjectDirectory,
   type ProjectRecord,
 } from './context-resolution/directories.js';
+export {
+  PolicyEngine,
+  POLICY_VERSION,
+  type DataClassification,
+  type PolicyDecision,
+  type PolicyDisposition,
+  type PolicyEvaluationRequest,
+  type PolicyOperation,
+} from './policy/policy-engine.js';

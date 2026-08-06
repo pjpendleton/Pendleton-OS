@@ -9,6 +9,7 @@
 | Schema validation tests           | Coding Standards v1; Technology Profile sections 6 and 15  | KRN-003 |
 | Command intake and idempotency    | API Contract v1; Technology Profile sections 6 and 9       | KRN-004 |
 | Identity and project resolution   | Policy Matrix v1; System Design context boundary           | KRN-005 |
+| Versioned policy evaluation       | Policy Matrix v1; Voice Operating Contract v1              | KRN-006 |
 
 Every future material behavior, schema, workflow, provider mutation, or public interface must
 add or update its traceability entry in the same controlled change.

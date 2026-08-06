@@ -20,6 +20,10 @@ KRN-005 resolves authenticated principals, active actors, authorized projects, a
 targets before policy evaluation. Unresolved, disabled, ambiguous, archived, or unauthorized
 context returns a typed rejection and cannot enter the execution path.
 
+KRN-006 evaluates the approved Policy Matrix as deterministic, versioned rules. Every material
+operation returns allow, deny, confirm, or escalate together with rule identifiers, reason codes,
+notification and review requirements, and explicit driving-mode handling.
+
 ## Prerequisites
 
 - Node.js 24 LTS
