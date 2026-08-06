@@ -5,11 +5,14 @@
   "type": "module",
   "scripts": {
     "build": "tsc6 -b",
-    "typecheck": "tsc6 -b --pretty false"
+    "typecheck": "tsc6 -b --pretty false",
+    "start": "node dist/server.js"
   },
   "dependencies": {
     "@pendleton-os/application": "workspace:*",
+    "@pendleton-os/adapters": "workspace:*",
     "@pendleton-os/contracts": "workspace:*",
+    "@pendleton-os/persistence": "workspace:*",
     "fastify": "5.11.2"
   }
 }

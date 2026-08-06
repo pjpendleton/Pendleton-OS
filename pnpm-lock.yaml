@@ -35,12 +35,18 @@ importers:
 
   apps/api:
     dependencies:
+      '@pendleton-os/adapters':
+        specifier: workspace:*
+        version: link:../../packages/adapters
       '@pendleton-os/application':
         specifier: workspace:*
         version: link:../../packages/application
       '@pendleton-os/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@pendleton-os/persistence':
+        specifier: workspace:*
+        version: link:../../packages/persistence
       fastify:
         specifier: 5.11.2
         version: 5.11.2
@@ -53,6 +59,9 @@ importers:
       '@pendleton-os/contracts':
         specifier: workspace:*
         version: link:../contracts
+      googleapis:
+        specifier: 174.0.1
+        version: 174.0.1(supports-color@7.2.0)
     devDependencies:
       '@types/node':
         specifier: 24.2.0

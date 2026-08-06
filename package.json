@@ -19,7 +19,9 @@
     "google:bootstrap": "node scripts/google-drive-bootstrap.mjs",
     "database:secret": "node scripts/create-database-runtime-secret.mjs",
     "database:smoke": "node scripts/database-smoke.mjs",
-    "live:smoke": "node scripts/live-core-kernel-smoke.mjs"
+    "live:smoke": "node scripts/live-core-kernel-smoke.mjs",
+    "start": "pnpm --filter @pendleton-os/api start",
+    "http:smoke": "node scripts/http-api-smoke.mjs"
   },
   "devDependencies": {
     "@eslint/js": "9.32.0",

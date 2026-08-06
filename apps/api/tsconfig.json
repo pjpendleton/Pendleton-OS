@@ -5,6 +5,11 @@
     "outDir": "dist",
     "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
   },
-  "references": [{ "path": "../../packages/contracts" }, { "path": "../../packages/application" }],
+  "references": [
+    { "path": "../../packages/contracts" },
+    { "path": "../../packages/application" },
+    { "path": "../../packages/adapters" },
+    { "path": "../../packages/persistence" }
+  ],
   "include": ["src/**/*.ts"]
 }
