@@ -12,8 +12,8 @@
     "typecheck": "tsc6 -b --pretty false"
   },
   "dependencies": {
-    "@pendleton-os/application": "workspace:*",
-    "@pendleton-os/contracts": "workspace:*",
+    "@pendleton-os/application": "*",
+    "@pendleton-os/contracts": "*",
     "googleapis": "174.0.1"
   },
   "devDependencies": {

@@ -12,7 +12,7 @@
     "typecheck": "tsc6 -b --pretty false"
   },
   "dependencies": {
-    "@pendleton-os/application": "workspace:*",
+    "@pendleton-os/application": "*",
     "pg": "8.16.3"
   },
   "devDependencies": {

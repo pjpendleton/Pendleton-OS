@@ -12,7 +12,7 @@
     "typecheck": "tsc6 -b --pretty false"
   },
   "dependencies": {
-    "@pendleton-os/contracts": "workspace:*"
+    "@pendleton-os/contracts": "*"
   },
   "devDependencies": {
     "@types/node": "24.2.0"
