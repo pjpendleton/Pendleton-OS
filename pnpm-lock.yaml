@@ -32,9 +32,22 @@ importers:
 
   apps/api:
     dependencies:
+      '@pendleton-os/application':
+        specifier: workspace:*
+        version: link:../../packages/application
       '@pendleton-os/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+
+  packages/application:
+    dependencies:
+      '@pendleton-os/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+    devDependencies:
+      '@types/node':
+        specifier: 24.2.0
+        version: 24.2.0
 
   packages/contracts:
     dependencies:

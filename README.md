@@ -12,6 +12,10 @@ Milestone 1 proves the canonical kernel path:
 KRN-002 establishes this repository and its delivery controls. KRN-003 publishes the initial
 machine-readable core schemas in `packages/contracts/schemas`.
 
+KRN-004 implements framework-independent command intake in `packages/application`. It validates
+and normalizes submissions, assigns command and correlation identifiers, resolves command support,
+classifies ambiguous targets, and reserves idempotency keys behind a replaceable persistence port.
+
 ## Prerequisites
 
 - Node.js 24 LTS
