@@ -66,3 +66,9 @@ export {
   type EventEnvelope,
   type EventStore,
 } from './events/event-recorder.js';
+export {
+  UnifiedCommandGateway,
+  type GatewayOutcome,
+  type GatewayRequest,
+  type WorkflowDispatcher,
+} from './gateway/unified-command-gateway.js';

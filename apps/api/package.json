@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@pendleton-os/application": "workspace:*",
-    "@pendleton-os/contracts": "workspace:*"
+    "@pendleton-os/contracts": "workspace:*",
+    "fastify": "5.11.2"
   }
 }
