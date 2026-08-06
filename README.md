@@ -35,6 +35,9 @@ returns content, revision, parent, and hash evidence for later verification.
 KRN-009 independently reads back artifact state and classifies evidence as verified, mismatch,
 unavailable, or partial. Required verification can no longer be collapsed into provider success.
 
+KRN-010 records immutable, correlated events with recursive secret redaction. The event store can
+reconstruct activity by correlation, command, or workflow without treating diagnostic logs as audit.
+
 ## Prerequisites
 
 - Node.js 24 LTS

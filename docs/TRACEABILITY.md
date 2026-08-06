@@ -13,6 +13,7 @@
 | Durable workflow orchestration    | System Design workflow boundary; API Contract v1           | KRN-007 |
 | Scoped Google Drive adapter       | Policy Matrix Google Drive rules; adapter contract         | KRN-008 |
 | Independent artifact verification | System Design verification boundary; API Contract v1       | KRN-009 |
+| Immutable event and audit trail   | System Design Event Log; Technology Profile section 13     | KRN-010 |
 
 Every future material behavior, schema, workflow, provider mutation, or public interface must
 add or update its traceability entry in the same controlled change.

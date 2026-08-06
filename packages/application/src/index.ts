@@ -59,3 +59,10 @@ export {
   type ExpectedArtifactState,
   type VerificationResult,
 } from './verification/artifact-verifier.js';
+export {
+  EventRecorder,
+  InMemoryEventStore,
+  type AppendEventRequest,
+  type EventEnvelope,
+  type EventStore,
+} from './events/event-recorder.js';
