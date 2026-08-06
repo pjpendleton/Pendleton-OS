@@ -1,20 +1,31 @@
 import { buildApi } from './index.js';
 import { buildProductionRuntime } from './runtime.js';
 
-const apiToken = process.env.PENDLETON_API_TOKEN;
-if (apiToken === undefined || apiToken.length < 32) throw new Error('PENDLETON_API_TOKEN_REQUIRED');
-const runtime = await buildProductionRuntime();
-const app = buildApi(runtime.gateway, { apiToken, readiness: runtime.readiness, logger: true });
-const port = Number.parseInt(process.env.PORT ?? '3000', 10);
+const start = async (): Promise<void> => {
+  const apiToken = process.env.PENDLETON_API_TOKEN;
+  if (apiToken === undefined || apiToken.length < 32) {
+    throw new Error('PENDLETON_API_TOKEN_REQUIRED');
+  }
 
-const shutdown = async (): Promise<void> => {
-  await app.close();
-  await runtime.close();
+  const runtime = await buildProductionRuntime();
+  const app = buildApi(runtime.gateway, { apiToken, readiness: runtime.readiness, logger: true });
+  const port = Number.parseInt(process.env.PORT ?? '3000', 10);
+
+  const shutdown = async (): Promise<void> => {
+    await app.close();
+    await runtime.close();
+  };
+  process.once('SIGINT', () => {
+    void shutdown();
+  });
+  process.once('SIGTERM', () => {
+    void shutdown();
+  });
+
+  await app.listen({ host: '0.0.0.0', port });
 };
-process.once('SIGINT', () => {
-  void shutdown();
+
+void start().catch((error: unknown) => {
+  console.error('PENDLETON_API_START_FAILED', error);
+  process.exitCode = 1;
 });
-process.once('SIGTERM', () => {
-  void shutdown();
-});
-await app.listen({ host: '0.0.0.0', port });
