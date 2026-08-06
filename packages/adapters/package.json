@@ -11,6 +11,10 @@
     "build": "tsc6 -b",
     "typecheck": "tsc6 -b --pretty false"
   },
+  "dependencies": {
+    "@pendleton-os/application": "workspace:*",
+    "@pendleton-os/contracts": "workspace:*"
+  },
   "devDependencies": {
     "@types/node": "24.2.0"
   }

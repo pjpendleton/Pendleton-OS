@@ -32,3 +32,13 @@ describe('POST /v1/commands', () => {
     await app.close();
   });
 });
+
+describe('health endpoints', () => {
+  it('reports liveness and readiness', async () => {
+    const app = buildApi({ execute: () => Promise.resolve({ disposition: 'accepted' }) });
+    expect((await app.inject({ method: 'GET', url: '/health/live' })).statusCode).toBe(200);
+    const ready = await app.inject({ method: 'GET', url: '/health/ready' });
+    expect(ready.json()).toMatchObject({ service: 'pendleton-os-api', status: 'ready' });
+    await app.close();
+  });
+});

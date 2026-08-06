@@ -41,6 +41,12 @@ reconstruct activity by correlation, command, or workflow without treating diagn
 KRN-011 exposes one HTTP command entry point that composes context resolution, intake, policy, and
 workflow dispatch in mandatory order. Transport channels cannot directly invoke provider adapters.
 
+KRN-012 closes the vertical slice with an authorized Google Drive mutation, independent readback,
+verification evidence, and a correlated workflow audit chain. Verification mismatches fail closed.
+
+KRN-013 adds the durable PostgreSQL kernel schema, liveness/readiness endpoints, and the operational
+runbook for deployment, recovery, credential rotation, retries, and incident reconstruction.
+
 ## Prerequisites
 
 - Node.js 24 LTS

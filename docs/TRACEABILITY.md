@@ -15,6 +15,8 @@
 | Independent artifact verification | System Design verification boundary; API Contract v1       | KRN-009 |
 | Immutable event and audit trail   | System Design Event Log; Technology Profile section 13     | KRN-010 |
 | Unified command gateway           | ADR-004; API Contract v1; Technology Profile section 7     | KRN-011 |
+| Verified Drive vertical slice     | System Design canonical kernel path; API Contract v1       | KRN-012 |
+| Operational hardening             | Technology Profile sections 8, 13, 15, 17                  | KRN-013 |
 
 Every future material behavior, schema, workflow, provider mutation, or public interface must
 add or update its traceability entry in the same controlled change.

@@ -43,6 +43,13 @@ importers:
         version: 5.11.2
 
   packages/adapters:
+    dependencies:
+      '@pendleton-os/application':
+        specifier: workspace:*
+        version: link:../application
+      '@pendleton-os/contracts':
+        specifier: workspace:*
+        version: link:../contracts
     devDependencies:
       '@types/node':
         specifier: 24.2.0
