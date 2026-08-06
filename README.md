@@ -24,6 +24,10 @@ KRN-006 evaluates the approved Policy Matrix as deterministic, versioned rules. 
 operation returns allow, deny, confirm, or escalate together with rule identifiers, reason codes,
 notification and review requirements, and explicit driving-mode handling.
 
+KRN-007 provides durable workflow state machines behind a repository port. Workflows execute
+ordered steps, pause and resume for confirmation, retry within explicit limits, time out stalled
+work, fail deterministically, and resume from persisted state after orchestrator replacement.
+
 ## Prerequisites
 
 - Node.js 24 LTS

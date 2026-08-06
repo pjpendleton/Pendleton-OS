@@ -40,3 +40,15 @@ export {
   type PolicyEvaluationRequest,
   type PolicyOperation,
 } from './policy/policy-engine.js';
+export {
+  WorkflowOrchestrator,
+  type StartWorkflowRequest,
+  type WorkflowDefinition,
+  type WorkflowExecutionResult,
+  type WorkflowInstance,
+  type WorkflowStepDefinition,
+} from './workflow/workflow-orchestrator.js';
+export {
+  InMemoryWorkflowRepository,
+  type WorkflowRepository,
+} from './workflow/workflow-repository.js';
