@@ -11,6 +11,7 @@
 | Identity and project resolution   | Policy Matrix v1; System Design context boundary           | KRN-005 |
 | Versioned policy evaluation       | Policy Matrix v1; Voice Operating Contract v1              | KRN-006 |
 | Durable workflow orchestration    | System Design workflow boundary; API Contract v1           | KRN-007 |
+| Scoped Google Drive adapter       | Policy Matrix Google Drive rules; adapter contract         | KRN-008 |
 
 Every future material behavior, schema, workflow, provider mutation, or public interface must
 add or update its traceability entry in the same controlled change.

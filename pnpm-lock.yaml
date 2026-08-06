@@ -39,6 +39,12 @@ importers:
         specifier: workspace:*
         version: link:../../packages/contracts
 
+  packages/adapters:
+    devDependencies:
+      '@types/node':
+        specifier: 24.2.0
+        version: 24.2.0
+
   packages/application:
     dependencies:
       '@pendleton-os/contracts':

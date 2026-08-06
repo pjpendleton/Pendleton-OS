@@ -28,6 +28,10 @@ KRN-007 provides durable workflow state machines behind a repository port. Workf
 ordered steps, pause and resume for confirmation, retry within explicit limits, time out stalled
 work, fail deterministically, and resume from persisted state after orchestrator replacement.
 
+KRN-008 provides a Google Drive adapter behind a provider client port. It scopes every operation to
+the resolved project root, preserves native document identity, requires revision-safe updates, and
+returns content, revision, parent, and hash evidence for later verification.
+
 ## Prerequisites
 
 - Node.js 24 LTS

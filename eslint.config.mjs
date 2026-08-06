@@ -16,6 +16,7 @@ export default tseslint.config(
             '*.mjs',
             'packages/contracts/test/*.ts',
             'packages/application/test/*.ts',
+            'packages/adapters/test/*.ts',
           ],
         },
         tsconfigRootDir: import.meta.dirname,
