@@ -4,6 +4,7 @@
     { "path": "./packages/contracts" },
     { "path": "./packages/application" },
     { "path": "./packages/adapters" },
+    { "path": "./packages/persistence" },
     { "path": "./apps/api" }
   ]
 }

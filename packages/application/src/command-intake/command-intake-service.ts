@@ -259,6 +259,9 @@ export class CommandIntakeService {
       payload,
     });
     const reservation = await this.#idempotencyRegistry.reserve({
+      actorId: actor.actorId,
+      projectId: projectContext.projectId,
+      commandType,
       idempotencyKey,
       requestFingerprint,
       commandId,

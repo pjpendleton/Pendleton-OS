@@ -16,7 +16,10 @@
     "test": "vitest run",
     "typecheck": "tsc6 -b",
     "google:authorize": "node scripts/google-oauth-authorize.mjs",
-    "google:bootstrap": "node scripts/google-drive-bootstrap.mjs"
+    "google:bootstrap": "node scripts/google-drive-bootstrap.mjs",
+    "database:secret": "node scripts/create-database-runtime-secret.mjs",
+    "database:smoke": "node scripts/database-smoke.mjs",
+    "live:smoke": "node scripts/live-core-kernel-smoke.mjs"
   },
   "devDependencies": {
     "@eslint/js": "9.32.0",
