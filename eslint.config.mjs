@@ -14,6 +14,7 @@ export default tseslint.config(
           allowDefaultProject: [
             '*.ts',
             '*.mjs',
+            'scripts/*.mjs',
             'packages/contracts/test/*.ts',
             'packages/application/test/*.ts',
             'packages/adapters/test/*.ts',
@@ -35,6 +36,16 @@ export default tseslint.config(
       '@typescript-eslint/no-non-null-assertion': 'off',
       '@typescript-eslint/no-unsafe-member-access': 'off',
       '@typescript-eslint/no-unsafe-return': 'off',
+    },
+  },
+  {
+    files: ['scripts/*.mjs'],
+    rules: {
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-misused-promises': 'off',
+      'no-undef': 'off',
     },
   },
 );

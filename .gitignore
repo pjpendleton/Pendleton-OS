@@ -5,4 +5,8 @@ coverage/
 .env.*
 !.env.example
 *.log
+client_secret*.json
+*oauth*client*.json
+*refresh*token*.json
+secrets/
 .DS_Store

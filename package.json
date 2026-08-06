@@ -14,7 +14,9 @@
     "lint": "eslint .",
     "schema:validate": "pnpm --filter @pendleton-os/contracts schema:validate",
     "test": "vitest run",
-    "typecheck": "tsc6 -b"
+    "typecheck": "tsc6 -b",
+    "google:authorize": "node scripts/google-oauth-authorize.mjs",
+    "google:bootstrap": "node scripts/google-drive-bootstrap.mjs"
   },
   "devDependencies": {
     "@eslint/js": "9.32.0",
@@ -23,6 +25,7 @@
     "prettier": "3.6.2",
     "typescript": "npm:@typescript/typescript6@6.0.2",
     "typescript-eslint": "8.66.0",
+    "googleapis": "174.0.1",
     "vitest": "3.2.4"
   }
 }
