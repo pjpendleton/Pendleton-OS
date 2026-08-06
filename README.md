@@ -16,6 +16,10 @@ KRN-004 implements framework-independent command intake in `packages/application
 and normalizes submissions, assigns command and correlation identifiers, resolves command support,
 classifies ambiguous targets, and reserves idempotency keys behind a replaceable persistence port.
 
+KRN-005 resolves authenticated principals, active actors, authorized projects, and project-owned
+targets before policy evaluation. Unresolved, disabled, ambiguous, archived, or unauthorized
+context returns a typed rejection and cannot enter the execution path.
+
 ## Prerequisites
 
 - Node.js 24 LTS
