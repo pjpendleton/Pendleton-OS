@@ -8,7 +8,15 @@ const start = async (): Promise<void> => {
   }
 
   const runtime = await buildProductionRuntime();
-  const app = buildApi(runtime.gateway, { apiToken, readiness: runtime.readiness, logger: true });
+  const app = buildApi(runtime.gateway, {
+    apiToken,
+    readiness: runtime.readiness,
+    logger: true,
+    chatAction: {
+      principalId: process.env.PENDLETON_PRINCIPAL_ID ?? 'peter',
+      projectId: process.env.PENDLETON_CHAT_PROJECT_ID ?? 'pendleton-os',
+    },
+  });
   const port = Number.parseInt(process.env.PORT ?? '3000', 10);
 
   const shutdown = async (): Promise<void> => {

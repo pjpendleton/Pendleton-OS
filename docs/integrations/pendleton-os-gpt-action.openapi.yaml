@@ -1,0 +1,80 @@
+openapi: 3.1.0
+info:
+  title: Pendleton OS Chat Action
+  description: Creates verified internal artifacts through the Pendleton OS Core Kernel.
+  version: 1.0.0
+servers:
+  - url: https://os.peterpendleton.com
+paths:
+  /v1/chat/artifacts:
+    post:
+      operationId: createPendletonArtifact
+      summary: Create a verified internal Pendleton OS artifact
+      description: >-
+        Use only when Peter explicitly asks to save, record, create, or preserve a note,
+        decision, draft, action record, or other internal artifact in Pendleton OS.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - title
+                - text
+              properties:
+                title:
+                  type: string
+                  minLength: 1
+                  maxLength: 200
+                  description: Concise, descriptive artifact title.
+                text:
+                  type: string
+                  minLength: 1
+                  maxLength: 100000
+                  description: Complete artifact content in clear Markdown-compatible text.
+      responses:
+        '202':
+          description: Artifact command accepted and its verified workflow completed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcceptedOutcome'
+        '400':
+          description: Invalid artifact content.
+        '401':
+          description: Missing or invalid API authentication.
+        '403':
+          description: Pendleton OS policy denied the operation.
+        '409':
+          description: Confirmation or escalation is required.
+        '503':
+          description: Chat Action or a required dependency is unavailable.
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    AcceptedOutcome:
+      type: object
+      additionalProperties: false
+      required:
+        - disposition
+        - commandId
+        - workflowId
+        - correlationId
+      properties:
+        disposition:
+          type: string
+          enum:
+            - accepted
+        commandId:
+          type: string
+        workflowId:
+          type: string
+        correlationId:
+          type: string
