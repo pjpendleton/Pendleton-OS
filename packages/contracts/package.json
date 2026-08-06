@@ -1,0 +1,19 @@
+{
+  "name": "@pendleton-os/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc6 -b",
+    "schema:validate": "vitest run test/schema-validation.test.ts",
+    "typecheck": "tsc6 -b --pretty false"
+  },
+  "dependencies": {
+    "ajv": "8.17.1",
+    "ajv-formats": "3.0.1"
+  }
+}

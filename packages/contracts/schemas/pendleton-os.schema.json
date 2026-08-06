@@ -1,0 +1,237 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.pendleton-os.local/v1/pendleton-os.schema.json",
+  "title": "Pendleton OS Core Contracts",
+  "type": "object",
+  "$defs": {
+    "Uuid": { "type": "string", "format": "uuid" },
+    "Timestamp": { "type": "string", "format": "date-time" },
+    "Actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actorId", "actorType", "roles"],
+      "properties": {
+        "actorId": { "$ref": "#/$defs/Uuid" },
+        "actorType": { "enum": ["human", "service", "system"] },
+        "roles": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      }
+    },
+    "ProjectContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["projectId", "environment"],
+      "properties": {
+        "projectId": { "type": "string", "minLength": 1 },
+        "environment": { "enum": ["development", "test", "staging", "production"] },
+        "targetResourceId": { "type": "string", "minLength": 1 }
+      }
+    },
+    "Command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "commandId",
+        "correlationId",
+        "idempotencyKey",
+        "contractVersion",
+        "commandType",
+        "actor",
+        "projectContext",
+        "interfaceContext",
+        "payload",
+        "requestedAt"
+      ],
+      "properties": {
+        "commandId": { "$ref": "#/$defs/Uuid" },
+        "correlationId": { "$ref": "#/$defs/Uuid" },
+        "idempotencyKey": { "type": "string", "minLength": 8, "maxLength": 200 },
+        "contractVersion": { "const": "1.0.0" },
+        "commandType": { "type": "string", "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)+$" },
+        "actor": { "$ref": "#/$defs/Actor" },
+        "projectContext": { "$ref": "#/$defs/ProjectContext" },
+        "interfaceContext": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["channel"],
+          "properties": {
+            "channel": { "enum": ["api", "web", "mobile", "voice", "automation"] },
+            "drivingMode": { "type": "boolean" }
+          }
+        },
+        "payload": { "type": "object" },
+        "requestedAt": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "PolicyDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policyDecisionId", "policyVersion", "disposition", "reasonCodes", "decidedAt"],
+      "properties": {
+        "policyDecisionId": { "$ref": "#/$defs/Uuid" },
+        "policyVersion": { "type": "string", "minLength": 1 },
+        "disposition": { "enum": ["allow", "deny", "confirm", "escalate"] },
+        "reasonCodes": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        },
+        "matchedRuleIds": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "decidedAt": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "WorkflowStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stepId", "stepType", "state", "attemptCount"],
+      "properties": {
+        "stepId": { "$ref": "#/$defs/Uuid" },
+        "stepType": { "type": "string", "minLength": 1 },
+        "state": {
+          "enum": ["pending", "running", "waiting_confirmation", "succeeded", "failed", "cancelled"]
+        },
+        "attemptCount": { "type": "integer", "minimum": 0 },
+        "startedAt": { "$ref": "#/$defs/Timestamp" },
+        "completedAt": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "Workflow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workflowId",
+        "commandId",
+        "workflowType",
+        "state",
+        "version",
+        "steps",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "workflowId": { "$ref": "#/$defs/Uuid" },
+        "commandId": { "$ref": "#/$defs/Uuid" },
+        "workflowType": { "type": "string", "minLength": 1 },
+        "state": {
+          "enum": [
+            "accepted",
+            "evaluating_policy",
+            "waiting_confirmation",
+            "executing",
+            "verifying",
+            "completed",
+            "failed",
+            "cancelled"
+          ]
+        },
+        "version": { "type": "integer", "minimum": 1 },
+        "steps": { "type": "array", "items": { "$ref": "#/$defs/WorkflowStep" }, "minItems": 1 },
+        "createdAt": { "$ref": "#/$defs/Timestamp" },
+        "updatedAt": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "Artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifactId",
+        "artifactType",
+        "provider",
+        "providerResourceId",
+        "version",
+        "createdAt"
+      ],
+      "properties": {
+        "artifactId": { "$ref": "#/$defs/Uuid" },
+        "artifactType": { "type": "string", "minLength": 1 },
+        "provider": { "type": "string", "minLength": 1 },
+        "providerResourceId": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
+        "contentHash": { "type": "string", "minLength": 16 },
+        "createdAt": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "VerificationResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["verificationId", "disposition", "method", "observations", "verifiedAt"],
+      "properties": {
+        "verificationId": { "$ref": "#/$defs/Uuid" },
+        "disposition": {
+          "enum": ["verified", "mismatch", "evidence_unavailable", "partial", "not_required"]
+        },
+        "method": { "type": "string", "minLength": 1 },
+        "observations": { "type": "object" },
+        "reasonCodes": { "type": "array", "items": { "type": "string" } },
+        "verifiedAt": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "Event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "eventId",
+        "eventType",
+        "eventVersion",
+        "occurredAt",
+        "recordedAt",
+        "correlationId",
+        "payload"
+      ],
+      "properties": {
+        "eventId": { "$ref": "#/$defs/Uuid" },
+        "eventType": { "type": "string", "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)+$" },
+        "eventVersion": { "type": "integer", "minimum": 1 },
+        "occurredAt": { "$ref": "#/$defs/Timestamp" },
+        "recordedAt": { "$ref": "#/$defs/Timestamp" },
+        "correlationId": { "$ref": "#/$defs/Uuid" },
+        "causationId": { "$ref": "#/$defs/Uuid" },
+        "commandId": { "$ref": "#/$defs/Uuid" },
+        "workflowId": { "$ref": "#/$defs/Uuid" },
+        "payload": { "type": "object" }
+      }
+    },
+    "PendletonError": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "category", "message", "retryable"],
+      "properties": {
+        "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]+$" },
+        "category": {
+          "enum": [
+            "validation",
+            "authentication",
+            "authorization",
+            "policy",
+            "conflict",
+            "provider",
+            "verification",
+            "internal"
+          ]
+        },
+        "message": { "type": "string", "minLength": 1 },
+        "retryable": { "type": "boolean" },
+        "details": { "type": "object" }
+      }
+    },
+    "IdempotencyRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["idempotencyKey", "requestFingerprint", "state", "createdAt", "updatedAt"],
+      "properties": {
+        "idempotencyKey": { "type": "string", "minLength": 8, "maxLength": 200 },
+        "requestFingerprint": { "type": "string", "minLength": 16 },
+        "state": {
+          "enum": ["reserved", "executing", "completed", "failed", "reconciliation_required"]
+        },
+        "resultReference": { "type": "string", "minLength": 1 },
+        "createdAt": { "$ref": "#/$defs/Timestamp" },
+        "updatedAt": { "$ref": "#/$defs/Timestamp" }
+      }
+    }
+  }
+}
