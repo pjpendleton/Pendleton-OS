@@ -32,6 +32,9 @@ KRN-008 provides a Google Drive adapter behind a provider client port. It scopes
 the resolved project root, preserves native document identity, requires revision-safe updates, and
 returns content, revision, parent, and hash evidence for later verification.
 
+KRN-009 independently reads back artifact state and classifies evidence as verified, mismatch,
+unavailable, or partial. Required verification can no longer be collapsed into provider success.
+
 ## Prerequisites
 
 - Node.js 24 LTS

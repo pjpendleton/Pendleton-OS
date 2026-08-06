@@ -52,3 +52,10 @@ export {
   InMemoryWorkflowRepository,
   type WorkflowRepository,
 } from './workflow/workflow-repository.js';
+export {
+  ArtifactVerifier,
+  type ArtifactObservation,
+  type ArtifactObservationReader,
+  type ExpectedArtifactState,
+  type VerificationResult,
+} from './verification/artifact-verifier.js';
