@@ -18,7 +18,7 @@
     "lint": "eslint .",
     "schema:validate": "npm run schema:validate --workspace=@pendleton-os/contracts",
     "test": "vitest run",
-    "typecheck": "tsc6 -b",
+    "typecheck": "tsc -b",
     "google:authorize": "node scripts/google-oauth-authorize.mjs",
     "google:bootstrap": "node scripts/google-drive-bootstrap.mjs",
     "database:secret": "node scripts/create-database-runtime-secret.mjs",
