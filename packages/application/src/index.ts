@@ -72,3 +72,10 @@ export {
   type GatewayRequest,
   type WorkflowDispatcher,
 } from './gateway/unified-command-gateway.js';
+export {
+  ConversationRuntime,
+  type AppendConversationTurnRequest,
+  type ConversationRepository,
+  type ConversationSnapshot,
+  type StartConversationRequest,
+} from './conversation/conversation-runtime.js';

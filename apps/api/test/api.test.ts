@@ -1,5 +1,51 @@
 import { describe, expect, it, vi } from 'vitest';
 import { buildApi } from '../src/index.js';
+import { ConversationRuntime, type ConversationRepository } from '@pendleton-os/application';
+import type {
+  ConversationSession,
+  ConversationStatus,
+  ConversationTurn,
+} from '@pendleton-os/contracts';
+
+const conversationRuntime = (): ConversationRuntime => {
+  const sessions = new Map<string, ConversationSession>();
+  const turns: ConversationTurn[] = [];
+  const repository: ConversationRepository = {
+    createSession: (session) => {
+      sessions.set(session.sessionId, session);
+      return Promise.resolve();
+    },
+    getSession: (sessionId) => Promise.resolve(sessions.get(sessionId)),
+    updateSessionStatus: (sessionId, status: ConversationStatus, at) => {
+      const current = sessions.get(sessionId);
+      if (current === undefined) return Promise.resolve(undefined);
+      const updated = {
+        ...current,
+        status,
+        lastActivityAt: at,
+        ...(status === 'closed' ? { closedAt: at } : {}),
+      };
+      sessions.set(sessionId, updated);
+      return Promise.resolve(updated);
+    },
+    appendTurn: (input) => {
+      const turn = { ...input, sequence: turns.length + 1 };
+      turns.push(turn);
+      return Promise.resolve(turn);
+    },
+    findTurnByIdempotencyKey: (sessionId, key) =>
+      Promise.resolve(
+        turns.find((turn) => turn.sessionId === sessionId && turn.idempotencyKey === key),
+      ),
+    listTurns: (sessionId, limit) =>
+      Promise.resolve(turns.filter((turn) => turn.sessionId === sessionId).slice(-limit)),
+  };
+  return new ConversationRuntime(
+    repository,
+    () => '00000000-0000-4000-8000-000000000001',
+    () => new Date('2026-08-07T12:00:00.000Z'),
+  );
+};
 
 describe('POST /v1/commands', () => {
   it('routes command requests only through the unified gateway', async () => {
@@ -193,6 +239,53 @@ describe('health endpoints', () => {
     expect((await app.inject({ method: 'GET', url: '/health/live' })).statusCode).toBe(200);
     const ready = await app.inject({ method: 'GET', url: '/health/ready' });
     expect(ready.json()).toMatchObject({ service: 'pendleton-os-api', status: 'ready' });
+    await app.close();
+  });
+});
+
+describe('conversation runtime API', () => {
+  it('starts, appends, and resumes a driving voice conversation', async () => {
+    const app = buildApi(
+      { execute: () => Promise.resolve({ disposition: 'accepted' }) },
+      {
+        apiToken: 'a'.repeat(32),
+        conversation: {
+          runtime: conversationRuntime(),
+          principalId: 'peter',
+          projectId: 'pendleton-os',
+        },
+      },
+    );
+    const auth = { authorization: `Bearer ${'a'.repeat(32)}` };
+    const created = await app.inject({
+      method: 'POST',
+      url: '/v1/conversations',
+      headers: auth,
+      payload: { channel: 'voice', drivingMode: true },
+    });
+    expect(created.statusCode).toBe(201);
+    const sessionId = created.json<{ sessionId: string }>().sessionId;
+    const appended = await app.inject({
+      method: 'POST',
+      url: `/v1/conversations/${sessionId}/turns`,
+      headers: auth,
+      payload: {
+        role: 'user',
+        kind: 'message',
+        text: 'Good morning.',
+        idempotencyKey: 'utterance-0001',
+      },
+    });
+    expect(appended.statusCode).toBe(201);
+    const resumed = await app.inject({
+      method: 'GET',
+      url: `/v1/conversations/${sessionId}`,
+      headers: auth,
+    });
+    expect(resumed.json()).toMatchObject({
+      responseStyle: 'brief',
+      turns: [{ text: 'Good morning.' }],
+    });
     await app.close();
   });
 });

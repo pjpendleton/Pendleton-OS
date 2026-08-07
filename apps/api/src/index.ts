@@ -3,6 +3,7 @@ import {
   VOICE_CONTRACT_VERSION,
   type VoiceArtifactRequest,
 } from '@pendleton-os/contracts';
+import type { ConversationRuntime } from '@pendleton-os/application';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { randomUUID } from 'node:crypto';
 
@@ -23,6 +24,11 @@ export const buildApi = (
       projectId: string;
     };
     voiceAction?: {
+      principalId: string;
+      projectId: string;
+    };
+    conversation?: {
+      runtime: ConversationRuntime;
       principalId: string;
       projectId: string;
     };
@@ -184,6 +190,108 @@ export const buildApi = (
         ? String(outcome.disposition)
         : 'internal_error';
     return reply.code(statusForDisposition(disposition)).send(outcome);
+  });
+  app.post('/v1/conversations', async (request, reply) => {
+    if (!authorized(request.headers.authorization)) {
+      return reply.code(401).send({ errors: [{ code: 'AUTHENTICATION_REQUIRED' }] });
+    }
+    if (options.conversation === undefined) {
+      return reply.code(503).send({ errors: [{ code: 'CONVERSATION_NOT_CONFIGURED' }] });
+    }
+    const body = request.body as { channel?: unknown; drivingMode?: unknown } | undefined;
+    const channel = body?.channel;
+    if (channel !== 'voice' && channel !== 'mobile' && channel !== 'web') {
+      return reply.code(400).send({ errors: [{ code: 'CONVERSATION_CHANNEL_INVALID' }] });
+    }
+    if (body?.drivingMode !== undefined && typeof body.drivingMode !== 'boolean') {
+      return reply.code(400).send({ errors: [{ code: 'DRIVING_MODE_INVALID' }] });
+    }
+    const session = await options.conversation.runtime.start({
+      principalId: options.conversation.principalId,
+      projectId: options.conversation.projectId,
+      channel,
+      drivingMode: body?.drivingMode === true,
+    });
+    return reply.code(201).send(session);
+  });
+  app.get('/v1/conversations/:sessionId', async (request, reply) => {
+    if (!authorized(request.headers.authorization)) {
+      return reply.code(401).send({ errors: [{ code: 'AUTHENTICATION_REQUIRED' }] });
+    }
+    if (options.conversation === undefined) {
+      return reply.code(503).send({ errors: [{ code: 'CONVERSATION_NOT_CONFIGURED' }] });
+    }
+    const { sessionId } = request.params as { sessionId: string };
+    try {
+      return await options.conversation.runtime.resume(sessionId, options.conversation.principalId);
+    } catch (error) {
+      const code = error instanceof Error ? error.message : 'CONVERSATION_INTERNAL_ERROR';
+      return reply
+        .code(code === 'CONVERSATION_ACCESS_DENIED' ? 403 : 404)
+        .send({ errors: [{ code }] });
+    }
+  });
+  app.post('/v1/conversations/:sessionId/turns', async (request, reply) => {
+    if (!authorized(request.headers.authorization)) {
+      return reply.code(401).send({ errors: [{ code: 'AUTHENTICATION_REQUIRED' }] });
+    }
+    if (options.conversation === undefined) {
+      return reply.code(503).send({ errors: [{ code: 'CONVERSATION_NOT_CONFIGURED' }] });
+    }
+    const { sessionId } = request.params as { sessionId: string };
+    const body = request.body as Record<string, unknown> | undefined;
+    const role = body?.role;
+    const kind = body?.kind;
+    const text = typeof body?.text === 'string' ? body.text : '';
+    const idempotencyKey =
+      typeof body?.idempotencyKey === 'string' ? body.idempotencyKey.trim() : '';
+    if (role !== 'user' && role !== 'assistant' && role !== 'system' && role !== 'tool') {
+      return reply.code(400).send({ errors: [{ code: 'CONVERSATION_ROLE_INVALID' }] });
+    }
+    if (
+      kind !== 'message' &&
+      kind !== 'action_proposal' &&
+      kind !== 'action_result' &&
+      kind !== 'summary'
+    ) {
+      return reply.code(400).send({ errors: [{ code: 'CONVERSATION_KIND_INVALID' }] });
+    }
+    if (idempotencyKey.length < 8) {
+      return reply.code(400).send({ errors: [{ code: 'IDEMPOTENCY_KEY_REQUIRED' }] });
+    }
+    try {
+      const turn = await options.conversation.runtime.append({
+        sessionId,
+        principalId: options.conversation.principalId,
+        role,
+        kind,
+        text,
+        idempotencyKey,
+      });
+      return await reply.code(201).send(turn);
+    } catch (error) {
+      const code = error instanceof Error ? error.message : 'CONVERSATION_INTERNAL_ERROR';
+      const status =
+        code === 'CONVERSATION_ACCESS_DENIED' ? 403 : code === 'CONVERSATION_NOT_FOUND' ? 404 : 409;
+      return reply.code(status).send({ errors: [{ code }] });
+    }
+  });
+  app.post('/v1/conversations/:sessionId/close', async (request, reply) => {
+    if (!authorized(request.headers.authorization)) {
+      return reply.code(401).send({ errors: [{ code: 'AUTHENTICATION_REQUIRED' }] });
+    }
+    if (options.conversation === undefined) {
+      return reply.code(503).send({ errors: [{ code: 'CONVERSATION_NOT_CONFIGURED' }] });
+    }
+    const { sessionId } = request.params as { sessionId: string };
+    try {
+      return await options.conversation.runtime.close(sessionId, options.conversation.principalId);
+    } catch (error) {
+      const code = error instanceof Error ? error.message : 'CONVERSATION_INTERNAL_ERROR';
+      return reply
+        .code(code === 'CONVERSATION_ACCESS_DENIED' ? 403 : 404)
+        .send({ errors: [{ code }] });
+    }
   });
   return app;
 };

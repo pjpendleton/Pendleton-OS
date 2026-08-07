@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import {
   ArtifactVerifier,
+  ConversationRuntime,
   CommandIntakeService,
   ContextResolutionService,
   EventRecorder,
@@ -21,6 +22,7 @@ import {
 } from '@pendleton-os/adapters';
 import {
   PostgresEventStore,
+  PostgresConversationRepository,
   PostgresIdempotencyRegistry,
   PostgresWorkflowRepository,
   createPostgresPool,
@@ -46,6 +48,7 @@ const secretText = async (environmentName: string, fileName: string): Promise<st
 
 export interface ProductionRuntime {
   readonly gateway: UnifiedCommandGateway;
+  readonly conversations: ConversationRuntime;
   readonly readiness: () => Promise<boolean>;
   readonly close: () => Promise<void>;
 }
@@ -71,6 +74,11 @@ export const buildProductionRuntime = async (): Promise<ProductionRuntime> => {
   const pool = createPostgresPool(databaseUrl);
   const driveClient = new GoogleApisDriveClient(createGoogleOAuthClient(oauthClient, tokens));
   const events = new PostgresEventStore(pool);
+  const conversations = new ConversationRuntime(
+    new PostgresConversationRepository(pool),
+    randomUUID,
+    () => new Date(),
+  );
   const workflows = new PostgresWorkflowRepository(pool);
   const gateway = new UnifiedCommandGateway({
     contexts: new ContextResolutionService({
@@ -124,6 +132,7 @@ export const buildProductionRuntime = async (): Promise<ProductionRuntime> => {
   if (!(await readiness())) throw new Error('DATABASE_NOT_READY');
   return {
     gateway,
+    conversations,
     readiness,
     close: async () => {
       await pool.end();

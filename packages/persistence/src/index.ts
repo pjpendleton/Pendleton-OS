@@ -1,5 +1,6 @@
 import pg from 'pg';
 import type {
+  ConversationRepository,
   EventEnvelope,
   EventStore,
   IdempotencyRegistry,
@@ -8,6 +9,11 @@ import type {
   WorkflowInstance,
   WorkflowRepository,
 } from '@pendleton-os/application';
+import type {
+  ConversationSession,
+  ConversationStatus,
+  ConversationTurn,
+} from '@pendleton-os/contracts';
 
 const { Pool } = pg;
 
@@ -206,5 +212,154 @@ export class PostgresWorkflowRepository implements WorkflowRepository {
       ],
     );
     return (result.rowCount ?? 0) === 1;
+  }
+}
+
+interface ConversationSessionRow extends Record<string, unknown> {
+  session_id: string;
+  contract_version: '1.0.0';
+  principal_id: string;
+  project_id: string;
+  channel: ConversationSession['channel'];
+  driving_mode: boolean;
+  status: ConversationStatus;
+  started_at: Date;
+  last_activity_at: Date;
+  closed_at: Date | null;
+}
+
+interface ConversationTurnRow extends Record<string, unknown> {
+  turn_id: string;
+  session_id: string;
+  turn_sequence: string | number;
+  role: ConversationTurn['role'];
+  kind: ConversationTurn['kind'];
+  text: string;
+  idempotency_key: string;
+  command_id: string | null;
+  correlation_id: string | null;
+  created_at: Date;
+}
+
+const mapSession = (row: ConversationSessionRow): ConversationSession => ({
+  sessionId: row.session_id,
+  contractVersion: row.contract_version,
+  principalId: row.principal_id,
+  projectId: row.project_id,
+  channel: row.channel,
+  drivingMode: row.driving_mode,
+  status: row.status,
+  startedAt: row.started_at.toISOString(),
+  lastActivityAt: row.last_activity_at.toISOString(),
+  ...(row.closed_at === null ? {} : { closedAt: row.closed_at.toISOString() }),
+});
+
+const mapTurn = (row: ConversationTurnRow): ConversationTurn => ({
+  turnId: row.turn_id,
+  sessionId: row.session_id,
+  sequence: Number(row.turn_sequence),
+  role: row.role,
+  kind: row.kind,
+  text: row.text,
+  idempotencyKey: row.idempotency_key,
+  ...(row.command_id === null ? {} : { commandId: row.command_id }),
+  ...(row.correlation_id === null ? {} : { correlationId: row.correlation_id }),
+  createdAt: row.created_at.toISOString(),
+});
+
+export class PostgresConversationRepository implements ConversationRepository {
+  constructor(private readonly client: SqlClient) {}
+
+  async createSession(session: ConversationSession): Promise<void> {
+    await this.client.query(
+      `INSERT INTO conversation_sessions
+       (session_id,contract_version,principal_id,project_id,channel,driving_mode,status,started_at,last_activity_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [
+        session.sessionId,
+        session.contractVersion,
+        session.principalId,
+        session.projectId,
+        session.channel,
+        session.drivingMode,
+        session.status,
+        session.startedAt,
+        session.lastActivityAt,
+      ],
+    );
+  }
+
+  async getSession(sessionId: string): Promise<ConversationSession | undefined> {
+    const result = await this.client.query<ConversationSessionRow>(
+      'SELECT * FROM conversation_sessions WHERE session_id=$1',
+      [sessionId],
+    );
+    const row = result.rows[0];
+    return row === undefined ? undefined : mapSession(row);
+  }
+
+  async updateSessionStatus(
+    sessionId: string,
+    status: ConversationStatus,
+    at: string,
+  ): Promise<ConversationSession | undefined> {
+    const result = await this.client.query<ConversationSessionRow>(
+      `UPDATE conversation_sessions
+       SET status=$2,last_activity_at=$3,closed_at=CASE WHEN $2='closed' THEN $3 ELSE NULL END
+       WHERE session_id=$1 RETURNING *`,
+      [sessionId, status, at],
+    );
+    const row = result.rows[0];
+    return row === undefined ? undefined : mapSession(row);
+  }
+
+  async appendTurn(input: Omit<ConversationTurn, 'sequence'>): Promise<ConversationTurn> {
+    const result = await this.client.query<ConversationTurnRow>(
+      `WITH inserted AS (
+         INSERT INTO conversation_turns
+          (turn_id,session_id,role,kind,text,idempotency_key,command_id,correlation_id,created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+         RETURNING *
+       ), touched AS (
+         UPDATE conversation_sessions SET last_activity_at=$9,status='active'
+         WHERE session_id=$2 RETURNING session_id
+       ) SELECT inserted.* FROM inserted,touched`,
+      [
+        input.turnId,
+        input.sessionId,
+        input.role,
+        input.kind,
+        input.text,
+        input.idempotencyKey,
+        input.commandId ?? null,
+        input.correlationId ?? null,
+        input.createdAt,
+      ],
+    );
+    const row = result.rows[0];
+    if (row === undefined) throw new Error('CONVERSATION_APPEND_FAILED');
+    return mapTurn(row);
+  }
+
+  async findTurnByIdempotencyKey(
+    sessionId: string,
+    idempotencyKey: string,
+  ): Promise<ConversationTurn | undefined> {
+    const result = await this.client.query<ConversationTurnRow>(
+      'SELECT * FROM conversation_turns WHERE session_id=$1 AND idempotency_key=$2',
+      [sessionId, idempotencyKey],
+    );
+    const row = result.rows[0];
+    return row === undefined ? undefined : mapTurn(row);
+  }
+
+  async listTurns(sessionId: string, limit: number): Promise<readonly ConversationTurn[]> {
+    const result = await this.client.query<ConversationTurnRow>(
+      `SELECT * FROM (
+         SELECT * FROM conversation_turns WHERE session_id=$1 ORDER BY turn_sequence DESC LIMIT $2
+       ) recent ORDER BY turn_sequence ASC`,
+      [sessionId, limit],
+    );
+    return result.rows.map(mapTurn);
   }
 }

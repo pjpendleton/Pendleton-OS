@@ -1,5 +1,6 @@
 export const CONTRACT_VERSION = '1.0.0' as const;
 export const VOICE_CONTRACT_VERSION = '1.0.0' as const;
+export const CONVERSATION_CONTRACT_VERSION = '1.0.0' as const;
 
 export const contractNames = [
   'Actor',
@@ -52,6 +53,37 @@ export interface VoiceCapabilities {
   readonly interruptionSupported: true;
   readonly actions: readonly ['artifact.create'];
   readonly consequentialActionsRequireConfirmation: true;
+}
+
+export type ConversationChannel = 'voice' | 'mobile' | 'web';
+export type ConversationStatus = 'active' | 'paused' | 'closed';
+export type ConversationRole = 'user' | 'assistant' | 'system' | 'tool';
+export type ConversationTurnKind = 'message' | 'action_proposal' | 'action_result' | 'summary';
+
+export interface ConversationSession {
+  readonly sessionId: string;
+  readonly contractVersion: typeof CONVERSATION_CONTRACT_VERSION;
+  readonly principalId: string;
+  readonly projectId: string;
+  readonly channel: ConversationChannel;
+  readonly drivingMode: boolean;
+  readonly status: ConversationStatus;
+  readonly startedAt: string;
+  readonly lastActivityAt: string;
+  readonly closedAt?: string;
+}
+
+export interface ConversationTurn {
+  readonly turnId: string;
+  readonly sessionId: string;
+  readonly sequence: number;
+  readonly role: ConversationRole;
+  readonly kind: ConversationTurnKind;
+  readonly text: string;
+  readonly idempotencyKey: string;
+  readonly commandId?: string;
+  readonly correlationId?: string;
+  readonly createdAt: string;
 }
 
 export interface Command {
