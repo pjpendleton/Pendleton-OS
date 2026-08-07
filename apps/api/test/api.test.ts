@@ -243,6 +243,18 @@ describe('health endpoints', () => {
   });
 });
 
+describe('mobile voice client', () => {
+  it('serves the WebRTC client without embedding credentials', async () => {
+    const app = buildApi({ execute: () => Promise.resolve({ disposition: 'accepted' }) });
+    const response = await app.inject({ method: 'GET', url: '/voice' });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['content-type']).toContain('text/html');
+    expect(response.body).toContain('Start Conversation');
+    expect(response.body).not.toContain('sk-');
+    await app.close();
+  });
+});
+
 describe('conversation runtime API', () => {
   it('starts, appends, and resumes a driving voice conversation', async () => {
     const app = buildApi(
@@ -286,6 +298,34 @@ describe('conversation runtime API', () => {
       responseStyle: 'brief',
       turns: [{ text: 'Good morning.' }],
     });
+    await app.close();
+  });
+
+  it('proxies an authenticated WebRTC offer without exposing the provider key', async () => {
+    const connect = vi.fn().mockResolvedValue({
+      sdp: 'answer-sdp',
+      location: '/v1/realtime/calls/rtc_123',
+    });
+    const app = buildApi(
+      { execute: () => Promise.resolve({ disposition: 'accepted' }) },
+      {
+        apiToken: 'a'.repeat(32),
+        realtime: { service: { connect } as never, principalId: 'peter' },
+      },
+    );
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/conversations/session-1/realtime',
+      headers: {
+        authorization: `Bearer ${'a'.repeat(32)}`,
+        'content-type': 'application/sdp',
+      },
+      payload: 'v=0\r\na=ice-ufrag:long-enough',
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toBe('answer-sdp');
+    expect(response.headers['x-pendleton-realtime-location']).toBe('/v1/realtime/calls/rtc_123');
+    expect(connect).toHaveBeenCalledWith('session-1', 'peter', 'v=0\r\na=ice-ufrag:long-enough');
     await app.close();
   });
 });

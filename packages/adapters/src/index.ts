@@ -10,3 +10,4 @@ export {
   GoogleApisDriveClient,
   createGoogleOAuthClient,
 } from './google-drive/googleapis-drive-client.js';
+export { OpenAIRealtimeProvider } from './openai-realtime/openai-realtime-provider.js';

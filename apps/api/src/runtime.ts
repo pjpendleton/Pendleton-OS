@@ -11,12 +11,14 @@ import {
   InMemoryIdentityDirectory,
   InMemoryProjectDirectory,
   PolicyEngine,
+  RealtimeConversationService,
   UnifiedCommandGateway,
   standardCommandCatalog,
 } from '@pendleton-os/application';
 import {
   GoogleApisDriveClient,
   GoogleDriveAdapter,
+  OpenAIRealtimeProvider,
   VerifiedDriveWorkflowDispatcher,
   createGoogleOAuthClient,
 } from '@pendleton-os/adapters';
@@ -49,6 +51,7 @@ const secretText = async (environmentName: string, fileName: string): Promise<st
 export interface ProductionRuntime {
   readonly gateway: UnifiedCommandGateway;
   readonly conversations: ConversationRuntime;
+  readonly realtime: RealtimeConversationService | undefined;
   readonly readiness: () => Promise<boolean>;
   readonly close: () => Promise<void>;
 }
@@ -79,6 +82,14 @@ export const buildProductionRuntime = async (): Promise<ProductionRuntime> => {
     randomUUID,
     () => new Date(),
   );
+  const openAiApiKey = process.env.OPENAI_API_KEY;
+  const realtime =
+    openAiApiKey === undefined
+      ? undefined
+      : new RealtimeConversationService(conversations, new OpenAIRealtimeProvider(openAiApiKey), {
+          model: process.env.OPENAI_REALTIME_MODEL ?? 'gpt-realtime-2.1',
+          voice: process.env.OPENAI_REALTIME_VOICE ?? 'marin',
+        });
   const workflows = new PostgresWorkflowRepository(pool);
   const gateway = new UnifiedCommandGateway({
     contexts: new ContextResolutionService({
@@ -133,6 +144,7 @@ export const buildProductionRuntime = async (): Promise<ProductionRuntime> => {
   return {
     gateway,
     conversations,
+    realtime,
     readiness,
     close: async () => {
       await pool.end();

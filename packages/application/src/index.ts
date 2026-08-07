@@ -79,3 +79,11 @@ export {
   type ConversationSnapshot,
   type StartConversationRequest,
 } from './conversation/conversation-runtime.js';
+export {
+  RealtimeConversationService,
+  type RealtimeCallAnswer,
+  type RealtimeCallRequest,
+  type RealtimeFunctionTool,
+  type RealtimeSessionConfiguration,
+  type RealtimeSessionProvider,
+} from './conversation/realtime-conversation-service.js';

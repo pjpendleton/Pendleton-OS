@@ -3,9 +3,10 @@ import {
   VOICE_CONTRACT_VERSION,
   type VoiceArtifactRequest,
 } from '@pendleton-os/contracts';
-import type { ConversationRuntime } from '@pendleton-os/application';
+import type { ConversationRuntime, RealtimeConversationService } from '@pendleton-os/application';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { randomUUID } from 'node:crypto';
+import { voiceClientPage } from './voice-client-page.js';
 
 export const kernelStatus = Object.freeze({
   service: 'pendleton-os-api',
@@ -32,6 +33,10 @@ export const buildApi = (
       principalId: string;
       projectId: string;
     };
+    realtime?: {
+      service: RealtimeConversationService;
+      principalId: string;
+    };
   } = {},
 ): FastifyInstance => {
   const app = Fastify({
@@ -39,7 +44,11 @@ export const buildApi = (
     bodyLimit: 1_048_576,
     requestTimeout: 30_000,
   });
+  app.addContentTypeParser('application/sdp', { parseAs: 'string' }, (_request, body, done) => {
+    done(null, body);
+  });
   app.get('/health/live', () => ({ status: 'alive' }));
+  app.get('/voice', (_request, reply) => reply.type('text/html').send(voiceClientPage));
   app.get('/health/ready', async (_request, reply) => {
     const ready = (await options.readiness?.()) ?? true;
     return ready ? kernelStatus : reply.code(503).send({ ...kernelStatus, status: 'unavailable' });
@@ -291,6 +300,39 @@ export const buildApi = (
       return reply
         .code(code === 'CONVERSATION_ACCESS_DENIED' ? 403 : 404)
         .send({ errors: [{ code }] });
+    }
+  });
+  app.post('/v1/conversations/:sessionId/realtime', async (request, reply) => {
+    if (!authorized(request.headers.authorization)) {
+      return reply.code(401).send({ errors: [{ code: 'AUTHENTICATION_REQUIRED' }] });
+    }
+    if (options.realtime === undefined) {
+      return reply.code(503).send({ errors: [{ code: 'REALTIME_NOT_CONFIGURED' }] });
+    }
+    const { sessionId } = request.params as { sessionId: string };
+    if (typeof request.body !== 'string') {
+      return reply.code(400).send({ errors: [{ code: 'REALTIME_SDP_REQUIRED' }] });
+    }
+    try {
+      const answer = await options.realtime.service.connect(
+        sessionId,
+        options.realtime.principalId,
+        request.body,
+      );
+      if (answer.location !== undefined)
+        reply.header('x-pendleton-realtime-location', answer.location);
+      return await reply.type('application/sdp').send(answer.sdp);
+    } catch (error) {
+      const code = error instanceof Error ? error.message : 'REALTIME_INTERNAL_ERROR';
+      const status =
+        code === 'CONVERSATION_ACCESS_DENIED'
+          ? 403
+          : code === 'CONVERSATION_NOT_FOUND'
+            ? 404
+            : code.startsWith('OPENAI_REALTIME_ERROR')
+              ? 502
+              : 400;
+      return reply.code(status).send({ errors: [{ code }] });
     }
   });
   return app;

@@ -25,6 +25,14 @@ const start = async (): Promise<void> => {
       principalId: process.env.PENDLETON_PRINCIPAL_ID ?? 'peter',
       projectId: process.env.PENDLETON_CONVERSATION_PROJECT_ID ?? 'pendleton-os',
     },
+    ...(runtime.realtime === undefined
+      ? {}
+      : {
+          realtime: {
+            service: runtime.realtime,
+            principalId: process.env.PENDLETON_PRINCIPAL_ID ?? 'peter',
+          },
+        }),
   });
   const port = Number.parseInt(process.env.PORT ?? '3000', 10);
 

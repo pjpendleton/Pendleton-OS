@@ -1,6 +1,6 @@
 # Pendleton Conversation Runtime v1
 
-Status: Implemented locally; production migration and deployment pending
+Status: Realtime server integration implemented locally; production credentials, migration, client, and deployment pending
 
 Version: 1.0.0
 
@@ -24,6 +24,8 @@ Raw audio is not retained in v1. Only text transcripts and explicit tool/action 
 - `GET /v1/conversations/{sessionId}` resumes the session with up to 50 recent turns.
 - `POST /v1/conversations/{sessionId}/turns` appends an idempotent transcript or action record.
 - `POST /v1/conversations/{sessionId}/close` closes the session while retaining its record.
+- `POST /v1/conversations/{sessionId}/realtime` accepts an authenticated WebRTC SDP offer and returns the provider SDP answer.
+- `GET /voice` serves the mobile WebRTC client used from iPhone Safari or an installed home-screen shortcut.
 
 All routes require the existing Pendleton OS bearer credential. Session ownership is verified on every read and write.
 
@@ -35,4 +37,8 @@ The migration explicitly revokes access from Supabase `anon` and `authenticated`
 
 ## Deliberate v1 boundary
 
-This slice does not yet generate assistant responses, transcribe audio, synthesize speech, summarize long sessions, retrieve project knowledge, or execute proposed tools. Those capabilities attach to this runtime in subsequent slices; they do not replace its session, policy, or audit boundaries.
+The Realtime integration uses `gpt-realtime-2.1` with the `marin` voice by default. The standard OpenAI API key stays on the Pendleton OS server. The mobile client receives only the SDP answer needed to establish its WebRTC media connection. The model receives recent durable transcript context and may call `propose_artifact_create`; the tool is explicitly a proposal and cannot bypass Pendleton OS policy, confirmation, verification, or audit controls.
+
+The mobile page starts and closes durable voice sessions, requests microphone access, plays realtime assistant audio, reports connection state, and provides a large explicit interruption control. Its access token remains in page memory and is never embedded in the client bundle. When the model proposes an internal artifact, the client submits it through the existing authenticated voice gateway and returns the real policy/workflow result to the model before conversation continues.
+
+This slice does not yet provide server-side sideband tool execution, automatic transcript event ingestion, long-session summarization, or project knowledge retrieval. Those capabilities attach to this runtime without changing its authority boundaries.
