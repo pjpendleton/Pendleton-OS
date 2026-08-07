@@ -1,7 +1,7 @@
 # Pendleton OS Voice Gateway v1
 
-Version: 1.0.0  
-Status: Implemented foundation
+Version: 1.1.0
+Status: Production deployed
 
 ## Purpose
 
@@ -33,8 +33,24 @@ whether the user is driving so the Policy Matrix can apply driving-specific hand
 }
 ```
 
-Both endpoints require the existing Pendleton OS bearer credential. The browser or mobile client
-must never receive the Google OAuth credential, database credential, or another provider secret.
+Both endpoints require an authenticated Pendleton OS principal. Administrative clients may use the
+server bearer credential. Paired mobile devices use a signed, `HttpOnly`, `Secure`,
+`SameSite=Strict` device-session cookie and never receive the permanent bearer credential. The
+browser or mobile client must never receive the Google OAuth credential, database credential,
+OpenAI API key, or another provider secret.
+
+## Mobile device pairing
+
+`GET /pair` serves the desktop authorization page. An administrator creates a five-minute,
+single-use pairing link through `POST /v1/device-pairings`. The server stores only a hash of the
+pending pairing secret. The QR code encodes the secret in the URL fragment, so it is not sent in
+the initial HTTP request or included in ordinary access logs.
+
+The iPhone claim page exchanges the secret through `POST /v1/device-pairings/claim`. A successful
+claim consumes the secret and sets a signed 30-day device cookie. Pairing codes are deliberately
+ephemeral and process-local; a deployment or restart safely invalidates any unclaimed code.
+Changing `PENDLETON_API_TOKEN` invalidates all device sessions. `POST /v1/auth/logout` clears the
+current device session.
 
 ## Safety boundaries
 
@@ -47,6 +63,5 @@ must never receive the Google OAuth credential, database credential, or another 
 
 ## Next slice
 
-Add short-lived realtime session issuance, authenticated conversation state, tool-result relay,
-and a driving-safe spoken response formatter. This requires an OpenAI Platform API credential and
-must not expose the long-lived key to the client.
+Add named-device inventory and individual device revocation without changing the cookie or policy
+boundary.

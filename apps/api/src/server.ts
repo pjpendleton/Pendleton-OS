@@ -1,5 +1,6 @@
 import { buildApi } from './index.js';
 import { buildProductionRuntime } from './runtime.js';
+import { DevicePairingService } from './device-pairing.js';
 
 const start = async (): Promise<void> => {
   const apiToken = process.env.PENDLETON_API_TOKEN;
@@ -8,8 +9,13 @@ const start = async (): Promise<void> => {
   }
 
   const runtime = await buildProductionRuntime();
+  const devicePairing = new DevicePairingService(apiToken);
   const app = buildApi(runtime.gateway, {
     apiToken,
+    devicePairing: {
+      service: devicePairing,
+      publicOrigin: process.env.PENDLETON_PUBLIC_ORIGIN ?? 'https://os.peterpendleton.com',
+    },
     readiness: runtime.readiness,
     logger: true,
     chatAction: {

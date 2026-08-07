@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { buildApi } from '../src/index.js';
+import { DevicePairingService } from '../src/device-pairing.js';
 import { ConversationRuntime, type ConversationRepository } from '@pendleton-os/application';
 import type {
   ConversationSession,
@@ -250,7 +251,80 @@ describe('mobile voice client', () => {
     expect(response.statusCode).toBe(200);
     expect(response.headers['content-type']).toContain('text/html');
     expect(response.body).toContain('Start Conversation');
+    expect(response.body).toContain('/v1/auth/session');
+    expect(response.body).not.toContain('API access token');
     expect(response.body).not.toContain('sk-');
+    await app.close();
+  });
+});
+
+describe('mobile device pairing', () => {
+  it('creates a one-time QR pairing and authorizes the claimed device cookie', async () => {
+    const service = new DevicePairingService('a'.repeat(32));
+    const app = buildApi(
+      { execute: () => Promise.resolve({ disposition: 'accepted' }) },
+      {
+        apiToken: 'a'.repeat(32),
+        devicePairing: { service, publicOrigin: 'https://os.peterpendleton.com' },
+      },
+    );
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/v1/device-pairings',
+      headers: { authorization: `Bearer ${'a'.repeat(32)}` },
+    });
+    expect(created.statusCode).toBe(201);
+    const pairing = created.json<{ claimUrl: string; qrCodeDataUrl: string }>();
+    expect(pairing.claimUrl).toMatch(/^https:\/\/os\.peterpendleton\.com\/pair\/claim#token=/);
+    expect(pairing.qrCodeDataUrl).toMatch(/^data:image\/png;base64,/);
+
+    const token = decodeURIComponent(pairing.claimUrl.split('#token=')[1] ?? '');
+    const claimed = await app.inject({
+      method: 'POST',
+      url: '/v1/device-pairings/claim',
+      payload: { token },
+    });
+    expect(claimed.statusCode).toBe(201);
+    const cookie = String(claimed.headers['set-cookie']).split(';')[0];
+    expect(claimed.headers['set-cookie']).toContain('HttpOnly');
+    expect(
+      (await app.inject({ method: 'GET', url: '/v1/auth/session', headers: { cookie } }))
+        .statusCode,
+    ).toBe(200);
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/v1/voice/capabilities',
+          headers: { cookie },
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/v1/device-pairings/claim',
+          payload: { token },
+        })
+      ).statusCode,
+    ).toBe(400);
+    await app.close();
+  });
+
+  it('requires the administrator bearer token to create a pairing', async () => {
+    const app = buildApi(
+      { execute: () => Promise.resolve({ disposition: 'accepted' }) },
+      {
+        apiToken: 'a'.repeat(32),
+        devicePairing: {
+          service: new DevicePairingService('a'.repeat(32)),
+          publicOrigin: 'https://os.peterpendleton.com',
+        },
+      },
+    );
+    expect((await app.inject({ method: 'POST', url: '/v1/device-pairings' })).statusCode).toBe(401);
     await app.close();
   });
 });

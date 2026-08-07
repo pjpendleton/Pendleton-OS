@@ -9,10 +9,14 @@
     "start": "node dist/server.js"
   },
   "dependencies": {
-    "@pendleton-os/application": "*",
     "@pendleton-os/adapters": "*",
+    "@pendleton-os/application": "*",
     "@pendleton-os/contracts": "*",
     "@pendleton-os/persistence": "*",
-    "fastify": "5.11.2"
+    "fastify": "5.11.2",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "@types/qrcode": "^1.5.6"
   }
 }

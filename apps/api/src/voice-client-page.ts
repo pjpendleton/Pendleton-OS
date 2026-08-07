@@ -13,7 +13,6 @@ export const voiceClientPage = `<!doctype html>
     h1 { margin: 0; font-size: clamp(2rem,8vw,3.5rem); letter-spacing: -.04em; }
     p { color: #cbd5e1; line-height: 1.5; margin: 0; }
     label { display: grid; gap: 8px; color: #cbd5e1; font-size: .9rem; }
-    input { width: 100%; padding: 16px; border-radius: 14px; border: 1px solid #334155; background: #111827; color: white; font-size: 16px; }
     .status { min-height: 76px; padding: 18px; border: 1px solid #334155; border-radius: 18px; background: #111827; display: grid; align-content: center; }
     .status strong { font-size: 1.2rem; }
     .status span { color: #94a3b8; margin-top: 4px; }
@@ -25,12 +24,12 @@ export const voiceClientPage = `<!doctype html>
     #start { grid-column: 1 / -1; }
     .driving { display: flex; align-items: center; gap: 10px; }
     .driving input { width: 24px; height: 24px; }
+    a { color: #93c5fd; }
   </style>
 </head>
 <body>
   <main>
     <div><h1>Pendleton OS</h1><p>Conversational voice, with Pendleton policy and audit controls.</p></div>
-    <label>API access token<input id="token" type="password" autocomplete="off" placeholder="Paste once per session"></label>
     <label class="driving"><input id="driving" type="checkbox" checked> Driving mode</label>
     <div class="status" aria-live="polite"><strong id="state">Ready</strong><span id="detail">Tap Start Conversation when parked.</span></div>
     <div class="controls">
@@ -38,10 +37,10 @@ export const voiceClientPage = `<!doctype html>
       <button id="interrupt" class="secondary" disabled>Interrupt</button>
       <button id="stop" class="danger" disabled>End</button>
     </div>
+    <p id="pairing" hidden>This device is not paired. <a href="/pair">Pair it from your desktop first.</a></p>
     <audio id="speaker" autoplay></audio>
   </main>
   <script>
-    const token = document.querySelector('#token');
     const driving = document.querySelector('#driving');
     const state = document.querySelector('#state');
     const detail = document.querySelector('#detail');
@@ -49,11 +48,11 @@ export const voiceClientPage = `<!doctype html>
     const interrupt = document.querySelector('#interrupt');
     const stop = document.querySelector('#stop');
     const speaker = document.querySelector('#speaker');
+    const pairing = document.querySelector('#pairing');
     let pc, dc, stream, sessionId;
-    const auth = () => ({ Authorization: 'Bearer ' + token.value.trim() });
     const show = (title, message) => { state.textContent = title; detail.textContent = message; };
     const api = async (path, options = {}) => {
-      const response = await fetch(path, { ...options, headers: { ...auth(), ...(options.headers || {}) } });
+      const response = await fetch(path, { ...options, headers: { ...(options.headers || {}) } });
       if (!response.ok) throw new Error((await response.text()) || ('HTTP ' + response.status));
       return response;
     };
@@ -65,7 +64,6 @@ export const voiceClientPage = `<!doctype html>
       start.disabled = false; interrupt.disabled = true; stop.disabled = true;
     };
     start.addEventListener('click', async () => {
-      if (token.value.trim().length < 32) { show('Token required','Paste the Pendleton OS API token.'); return; }
       start.disabled = true;
       try {
         show('Connecting','Requesting microphone access...');
@@ -116,7 +114,9 @@ export const voiceClientPage = `<!doctype html>
         const answer = await api('/v1/conversations/' + sessionId + '/realtime', { method: 'POST', headers: { 'Content-Type': 'application/sdp' }, body: offer.sdp });
         await pc.setRemoteDescription({ type: 'answer', sdp: await answer.text() });
       } catch (error) {
-        show('Could not connect', error instanceof Error ? error.message : 'Unknown error');
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        if (message.includes('401')) pairing.hidden = false;
+        show('Could not connect', message.includes('401') ? 'This device must be paired first.' : message);
         reset();
       }
     });
@@ -131,6 +131,12 @@ export const voiceClientPage = `<!doctype html>
       sessionId = undefined;
       show('Ended','The conversation is closed and its durable record is retained.');
     });
+    fetch('/v1/auth/session').then(response => {
+      if (!response.ok) {
+        pairing.hidden = false;
+        show('Pairing required','Pair this device from the desktop before starting.');
+      }
+    }).catch(() => show('Offline','Check your network connection.'));
   </script>
 </body>
 </html>`;

@@ -6,6 +6,9 @@ import {
 import type { ConversationRuntime, RealtimeConversationService } from '@pendleton-os/application';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { randomUUID } from 'node:crypto';
+import QRCode from 'qrcode';
+import { type DevicePairingService } from './device-pairing.js';
+import { pairingAdminPage, pairingClaimPage } from './pairing-client-pages.js';
 import { voiceClientPage } from './voice-client-page.js';
 
 export const kernelStatus = Object.freeze({
@@ -20,6 +23,10 @@ export const buildApi = (
     apiToken?: string;
     readiness?: () => Promise<boolean>;
     logger?: boolean;
+    devicePairing?: {
+      service: DevicePairingService;
+      publicOrigin: string;
+    };
     chatAction?: {
       principalId: string;
       projectId: string;
@@ -49,12 +56,27 @@ export const buildApi = (
   });
   app.get('/health/live', () => ({ status: 'alive' }));
   app.get('/voice', (_request, reply) => reply.type('text/html').send(voiceClientPage));
+  app.get('/pair', (_request, reply) =>
+    reply.header('cache-control', 'no-store').type('text/html').send(pairingAdminPage),
+  );
+  app.get('/pair/claim', (_request, reply) =>
+    reply.header('cache-control', 'no-store').type('text/html').send(pairingClaimPage),
+  );
   app.get('/health/ready', async (_request, reply) => {
     const ready = (await options.readiness?.()) ?? true;
     return ready ? kernelStatus : reply.code(503).send({ ...kernelStatus, status: 'unavailable' });
   });
-  const authorized = (authorization: string | undefined): boolean =>
+  const administratorAuthorized = (authorization: string | undefined): boolean =>
     options.apiToken === undefined || authorization === `Bearer ${options.apiToken}`;
+  const authorized = (headers: {
+    authorization?: string | undefined;
+    cookie?: string | undefined;
+  }): boolean =>
+    administratorAuthorized(headers.authorization) ||
+    (options.devicePairing?.service.verifySession(
+      options.devicePairing.service.cookieFromHeader(headers.cookie),
+    ) ??
+      false);
   const statusForDisposition = (disposition: string): number =>
     disposition === 'accepted'
       ? 202
@@ -65,8 +87,66 @@ export const buildApi = (
           : disposition === 'denied'
             ? 403
             : 400;
+  app.get('/v1/auth/session', async (request, reply) => {
+    if (!authorized(request.headers)) {
+      return reply.code(401).send({ authenticated: false });
+    }
+    return { authenticated: true };
+  });
+  app.post('/v1/auth/logout', async (_request, reply) => {
+    if (options.devicePairing !== undefined) {
+      reply.header('set-cookie', options.devicePairing.service.clearSessionCookie());
+    }
+    return reply.code(204).send();
+  });
+  app.post('/v1/device-pairings', async (request, reply) => {
+    if (!administratorAuthorized(request.headers.authorization)) {
+      return reply.code(401).send({ errors: [{ code: 'AUTHENTICATION_REQUIRED' }] });
+    }
+    if (options.devicePairing === undefined) {
+      return reply.code(503).send({ errors: [{ code: 'DEVICE_PAIRING_NOT_CONFIGURED' }] });
+    }
+    const pairing = options.devicePairing.service.createPairing();
+    const claimUrl = `${options.devicePairing.publicOrigin}/pair/claim#token=${encodeURIComponent(pairing.token)}`;
+    const qrCodeDataUrl = await QRCode.toDataURL(claimUrl, {
+      errorCorrectionLevel: 'M',
+      margin: 1,
+      width: 320,
+    });
+    request.log.info(
+      { pairingId: pairing.pairingId, expiresAt: pairing.expiresAt },
+      'device_pairing_created',
+    );
+    return reply.header('cache-control', 'no-store').code(201).send({
+      pairingId: pairing.pairingId,
+      claimUrl,
+      qrCodeDataUrl,
+      expiresAt: pairing.expiresAt,
+    });
+  });
+  app.post('/v1/device-pairings/claim', async (request, reply) => {
+    if (options.devicePairing === undefined) {
+      return reply.code(503).send({ errors: [{ code: 'DEVICE_PAIRING_NOT_CONFIGURED' }] });
+    }
+    const body = request.body as { token?: unknown } | undefined;
+    if (typeof body?.token !== 'string' || body.token.length < 50 || body.token.length > 200) {
+      return reply.code(400).send({ errors: [{ code: 'DEVICE_PAIRING_INVALID' }] });
+    }
+    try {
+      const session = options.devicePairing.service.claimPairing(body.token);
+      request.log.info({ expiresAt: session.expiresAt }, 'device_pairing_claimed');
+      return await reply
+        .header('cache-control', 'no-store')
+        .header('set-cookie', options.devicePairing.service.sessionCookie(session.cookieValue))
+        .code(201)
+        .send({ paired: true, expiresAt: session.expiresAt });
+    } catch (error) {
+      const code = error instanceof Error ? error.message : 'DEVICE_PAIRING_INVALID';
+      return reply.code(code === 'DEVICE_PAIRING_EXPIRED' ? 410 : 400).send({ errors: [{ code }] });
+    }
+  });
   app.post('/v1/commands', async (request, reply) => {
-    if (!authorized(request.headers.authorization)) {
+    if (!authorized(request.headers)) {
       return reply
         .code(401)
         .send({ disposition: 'rejected', errors: [{ code: 'AUTHENTICATION_REQUIRED' }] });
@@ -79,7 +159,7 @@ export const buildApi = (
     return reply.code(statusForDisposition(disposition)).send(outcome);
   });
   app.post('/v1/chat/artifacts', async (request, reply) => {
-    if (!authorized(request.headers.authorization)) {
+    if (!authorized(request.headers)) {
       return reply
         .code(401)
         .send({ disposition: 'rejected', errors: [{ code: 'AUTHENTICATION_REQUIRED' }] });
@@ -128,7 +208,7 @@ export const buildApi = (
     return reply.code(202).send(outcome);
   });
   app.get('/v1/voice/capabilities', async (request, reply) => {
-    if (!authorized(request.headers.authorization)) {
+    if (!authorized(request.headers)) {
       return reply
         .code(401)
         .send({ disposition: 'rejected', errors: [{ code: 'AUTHENTICATION_REQUIRED' }] });
@@ -143,7 +223,7 @@ export const buildApi = (
     };
   });
   app.post('/v1/voice/artifacts', async (request, reply) => {
-    if (!authorized(request.headers.authorization)) {
+    if (!authorized(request.headers)) {
       return reply
         .code(401)
         .send({ disposition: 'rejected', errors: [{ code: 'AUTHENTICATION_REQUIRED' }] });
@@ -201,7 +281,7 @@ export const buildApi = (
     return reply.code(statusForDisposition(disposition)).send(outcome);
   });
   app.post('/v1/conversations', async (request, reply) => {
-    if (!authorized(request.headers.authorization)) {
+    if (!authorized(request.headers)) {
       return reply.code(401).send({ errors: [{ code: 'AUTHENTICATION_REQUIRED' }] });
     }
     if (options.conversation === undefined) {
@@ -224,7 +304,7 @@ export const buildApi = (
     return reply.code(201).send(session);
   });
   app.get('/v1/conversations/:sessionId', async (request, reply) => {
-    if (!authorized(request.headers.authorization)) {
+    if (!authorized(request.headers)) {
       return reply.code(401).send({ errors: [{ code: 'AUTHENTICATION_REQUIRED' }] });
     }
     if (options.conversation === undefined) {
@@ -241,7 +321,7 @@ export const buildApi = (
     }
   });
   app.post('/v1/conversations/:sessionId/turns', async (request, reply) => {
-    if (!authorized(request.headers.authorization)) {
+    if (!authorized(request.headers)) {
       return reply.code(401).send({ errors: [{ code: 'AUTHENTICATION_REQUIRED' }] });
     }
     if (options.conversation === undefined) {
@@ -286,7 +366,7 @@ export const buildApi = (
     }
   });
   app.post('/v1/conversations/:sessionId/close', async (request, reply) => {
-    if (!authorized(request.headers.authorization)) {
+    if (!authorized(request.headers)) {
       return reply.code(401).send({ errors: [{ code: 'AUTHENTICATION_REQUIRED' }] });
     }
     if (options.conversation === undefined) {
@@ -303,7 +383,7 @@ export const buildApi = (
     }
   });
   app.post('/v1/conversations/:sessionId/realtime', async (request, reply) => {
-    if (!authorized(request.headers.authorization)) {
+    if (!authorized(request.headers)) {
       return reply.code(401).send({ errors: [{ code: 'AUTHENTICATION_REQUIRED' }] });
     }
     if (options.realtime === undefined) {

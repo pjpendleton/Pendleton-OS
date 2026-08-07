@@ -1,8 +1,8 @@
 # Pendleton Conversation Runtime v1
 
-Status: Realtime server integration implemented locally; production credentials, migration, client, and deployment pending
+Status: Production deployed with realtime voice and secure mobile device pairing
 
-Version: 1.0.0
+Version: 1.1.0
 
 Date: 2026-08-07
 
@@ -27,7 +27,7 @@ Raw audio is not retained in v1. Only text transcripts and explicit tool/action 
 - `POST /v1/conversations/{sessionId}/realtime` accepts an authenticated WebRTC SDP offer and returns the provider SDP answer.
 - `GET /voice` serves the mobile WebRTC client used from iPhone Safari or an installed home-screen shortcut.
 
-All routes require the existing Pendleton OS bearer credential. Session ownership is verified on every read and write.
+All routes require an authenticated Pendleton OS principal. Administrative callers may use the server bearer credential; paired mobile devices use a signed, secure, HTTP-only device cookie. Session ownership is verified on every read and write.
 
 ## Persistence and security
 
@@ -39,6 +39,6 @@ The migration explicitly revokes access from Supabase `anon` and `authenticated`
 
 The Realtime integration uses `gpt-realtime-2.1` with the `marin` voice by default. The standard OpenAI API key stays on the Pendleton OS server. The mobile client receives only the SDP answer needed to establish its WebRTC media connection. The model receives recent durable transcript context and may call `propose_artifact_create`; the tool is explicitly a proposal and cannot bypass Pendleton OS policy, confirmation, verification, or audit controls.
 
-The mobile page starts and closes durable voice sessions, requests microphone access, plays realtime assistant audio, reports connection state, and provides a large explicit interruption control. Its access token remains in page memory and is never embedded in the client bundle. When the model proposes an internal artifact, the client submits it through the existing authenticated voice gateway and returns the real policy/workflow result to the model before conversation continues.
+The mobile page starts and closes durable voice sessions, requests microphone access, plays realtime assistant audio, reports connection state, and provides a large explicit interruption control. The permanent access token is never entered or retained on the phone. A one-time desktop pairing ceremony grants a signed 30-day secure device cookie. When the model proposes an internal artifact, the client submits it through the existing authenticated voice gateway and returns the real policy/workflow result to the model before conversation continues.
 
 This slice does not yet provide server-side sideband tool execution, automatic transcript event ingestion, long-session summarization, or project knowledge retrieval. Those capabilities attach to this runtime without changing its authority boundaries.
