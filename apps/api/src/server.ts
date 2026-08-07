@@ -16,6 +16,10 @@ const start = async (): Promise<void> => {
       principalId: process.env.PENDLETON_PRINCIPAL_ID ?? 'peter',
       projectId: process.env.PENDLETON_CHAT_PROJECT_ID ?? 'pendleton-os',
     },
+    voiceAction: {
+      principalId: process.env.PENDLETON_PRINCIPAL_ID ?? 'peter',
+      projectId: process.env.PENDLETON_VOICE_PROJECT_ID ?? 'pendleton-os',
+    },
   });
   const port = Number.parseInt(process.env.PORT ?? '3000', 10);
 

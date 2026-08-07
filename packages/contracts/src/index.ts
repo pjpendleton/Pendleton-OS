@@ -1,4 +1,5 @@
 export const CONTRACT_VERSION = '1.0.0' as const;
+export const VOICE_CONTRACT_VERSION = '1.0.0' as const;
 
 export const contractNames = [
   'Actor',
@@ -35,6 +36,22 @@ export interface ProjectContext {
 export interface InterfaceContext {
   readonly channel: InterfaceChannel;
   readonly drivingMode?: boolean;
+}
+
+export interface VoiceArtifactRequest {
+  readonly idempotencyKey: string;
+  readonly title: string;
+  readonly text: string;
+  readonly drivingMode: boolean;
+}
+
+export interface VoiceCapabilities {
+  readonly contractVersion: typeof VOICE_CONTRACT_VERSION;
+  readonly channel: 'voice';
+  readonly drivingModeSupported: true;
+  readonly interruptionSupported: true;
+  readonly actions: readonly ['artifact.create'];
+  readonly consequentialActionsRequireConfirmation: true;
 }
 
 export interface Command {

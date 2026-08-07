@@ -95,6 +95,98 @@ describe('POST /v1/chat/artifacts', () => {
   });
 });
 
+describe('voice gateway', () => {
+  it('publishes authenticated, versioned voice capabilities', async () => {
+    const app = buildApi(
+      { execute: () => Promise.resolve({ disposition: 'accepted' }) },
+      { apiToken: 'a'.repeat(32) },
+    );
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/voice/capabilities',
+      headers: { authorization: `Bearer ${'a'.repeat(32)}` },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      contractVersion: '1.0.0',
+      channel: 'voice',
+      drivingModeSupported: true,
+      interruptionSupported: true,
+      actions: ['artifact.create'],
+      consequentialActionsRequireConfirmation: true,
+    });
+    await app.close();
+  });
+
+  it('maps a driving voice capture through the unified gateway', async () => {
+    const execute = vi.fn().mockResolvedValue({
+      disposition: 'accepted',
+      commandId: 'command-voice-1',
+      workflowId: 'workflow-voice-1',
+      correlationId: 'correlation-voice-1',
+    });
+    const app = buildApi(
+      { execute },
+      {
+        apiToken: 'a'.repeat(32),
+        voiceAction: { principalId: 'peter', projectId: 'pendleton-os' },
+      },
+    );
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/voice/artifacts',
+      headers: { authorization: `Bearer ${'a'.repeat(32)}` },
+      payload: {
+        idempotencyKey: 'voice-session-1-utterance-1',
+        title: 'Driving note',
+        text: 'Follow up on the title report.',
+        drivingMode: true,
+      },
+    });
+    expect(response.statusCode).toBe(202);
+    expect(execute).toHaveBeenCalledWith({
+      principalId: 'peter',
+      project: { projectId: 'pendleton-os' },
+      command: {
+        commandType: 'artifact.create',
+        idempotencyKey: 'voice-session-1-utterance-1',
+        interfaceContext: { channel: 'voice', drivingMode: true },
+        payload: { title: 'Driving note', text: 'Follow up on the title report.' },
+      },
+      policy: {
+        operation: 'artifact.create_internal',
+        dataClassification: 'internal',
+        grantedScope: true,
+        verificationAvailable: true,
+      },
+    });
+    await app.close();
+  });
+
+  it('requires an idempotency key before voice work reaches the kernel', async () => {
+    const execute = vi.fn();
+    const app = buildApi(
+      { execute },
+      {
+        apiToken: 'a'.repeat(32),
+        voiceAction: { principalId: 'peter', projectId: 'pendleton-os' },
+      },
+    );
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/voice/artifacts',
+      headers: { authorization: `Bearer ${'a'.repeat(32)}` },
+      payload: { title: 'Note', text: 'Body', drivingMode: true },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      errors: [{ code: 'IDEMPOTENCY_KEY_REQUIRED' }],
+    });
+    expect(execute).not.toHaveBeenCalled();
+    await app.close();
+  });
+});
+
 describe('health endpoints', () => {
   it('reports liveness and readiness', async () => {
     const app = buildApi({ execute: () => Promise.resolve({ disposition: 'accepted' }) });

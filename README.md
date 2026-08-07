@@ -47,6 +47,10 @@ verification evidence, and a correlated workflow audit chain. Verification misma
 KRN-013 adds the durable PostgreSQL kernel schema, liveness/readiness endpoints, and the operational
 runbook for deployment, recovery, credential rotation, retries, and incident reconstruction.
 
+VOICE-001 adds a versioned voice ingress contract and a driving-aware internal artifact capture.
+Voice requests remain subject to the unified command, policy, verification, and audit path, and
+require caller-supplied idempotency keys to make spoken retries safe.
+
 ## Prerequisites
 
 - Node.js 24 LTS
