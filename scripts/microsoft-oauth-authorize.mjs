@@ -17,7 +17,9 @@ const server = createServer();
 await new Promise((resolve) => server.listen(0, 'localhost', resolve));
 const address = server.address();
 if (typeof address !== 'object' || address === null) throw new Error('OAUTH_LISTENER_FAILED');
-const redirectUri = `http://localhost:${String(address.port)}/oauth2/callback`;
+// Microsoft treats localhost loopback ports as interchangeable for native clients.
+// Register `http://localhost` in Entra and use the ephemeral local port here.
+const redirectUri = `http://localhost:${String(address.port)}`;
 const state = randomUUID();
 const verifier = randomBytes(48).toString('base64url');
 const challenge = createHash('sha256').update(verifier).digest('base64url');
@@ -39,7 +41,7 @@ console.log(`AUTHORIZATION_URL=${authorization.toString()}`);
 server.on('request', async (request, response) => {
   try {
     const url = new URL(request.url ?? '/', redirectUri);
-    if (url.pathname !== '/oauth2/callback' || url.searchParams.get('state') !== state)
+    if (url.pathname !== '/' || url.searchParams.get('state') !== state)
       throw new Error('OAUTH_CALLBACK_INVALID');
     const code = url.searchParams.get('code');
     if (!code) throw new Error(url.searchParams.get('error') ?? 'OAUTH_CODE_MISSING');
