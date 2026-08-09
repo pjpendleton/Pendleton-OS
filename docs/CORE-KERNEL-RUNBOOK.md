@@ -1,12 +1,13 @@
 # Core Kernel Runbook
 
-Version: 1.0.0  
+Version: 1.1.0
 Status: Accepted
 
 ## Health and readiness
 
 - Liveness confirms that the API process can serve requests.
 - Readiness requires the policy catalog, durable event store, workflow store, identity/project directories, and enabled provider adapters.
+- Production readiness also requires an active `pendleton-os` registry record and a registered Google Drive `project-root` resource.
 - Remove an instance from traffic whenever a required readiness dependency fails.
 
 ## Failure handling
@@ -25,4 +26,4 @@ Status: Accepted
 
 ## Deployment gate
 
-Run `pnpm check` and `pnpm build`; apply migrations transactionally; verify readiness; execute one authorized Google Drive create/readback smoke test; then enable production traffic.
+Run `npm run build` and `npm run check`; apply migrations transactionally; verify registry security advisors and readiness; execute one authorized Google Drive create/readback smoke test; then enable production traffic.

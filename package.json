@@ -24,6 +24,7 @@
     "google:bootstrap": "node scripts/google-drive-bootstrap.mjs",
     "database:secret": "node scripts/create-database-runtime-secret.mjs",
     "database:smoke": "node scripts/database-smoke.mjs",
+    "projects:import": "node scripts/import-local-project-candidates.mjs",
     "live:smoke": "node scripts/live-core-kernel-smoke.mjs",
     "start": "npm run start --workspace=@pendleton-os/api",
     "http:smoke": "node scripts/http-api-smoke.mjs"

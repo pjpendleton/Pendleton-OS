@@ -51,6 +51,10 @@ VOICE-001 adds a versioned voice ingress contract and a driving-aware internal a
 Voice requests remain subject to the unified command, policy, verification, and audit path, and
 require caller-supplied idempotency keys to make spoken retries safe.
 
+PROJECT-001 persists project identity, aliases, memberships, and provider resource references in
+PostgreSQL. Discovered folders enter as non-operational candidates and require explicit
+administrative activation before command or voice use. See `docs/PROJECT-REGISTRY-V1.md`.
+
 ## Prerequisites
 
 - Node.js 24 LTS

@@ -3,13 +3,119 @@ import {
   VOICE_CONTRACT_VERSION,
   type VoiceArtifactRequest,
 } from '@pendleton-os/contracts';
-import type { ConversationRuntime, RealtimeConversationService } from '@pendleton-os/application';
+import type {
+  ConversationRuntime,
+  ProjectCandidateInput,
+  ProjectRegistry,
+  ProjectResourceProvider,
+  ProjectResourceType,
+  ProjectStatus,
+  RealtimeConversationService,
+} from '@pendleton-os/application';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { randomUUID } from 'node:crypto';
 import QRCode from 'qrcode';
 import { type DevicePairingService } from './device-pairing.js';
 import { pairingAdminPage, pairingClaimPage } from './pairing-client-pages.js';
 import { voiceClientPage } from './voice-client-page.js';
+
+const projectStatuses = new Set<ProjectStatus>(['candidate', 'active', 'archived']);
+const projectProviders = new Set<ProjectResourceProvider>([
+  'google-drive',
+  'local-filesystem',
+  'gmail',
+  'microsoft-graph',
+  'manual',
+]);
+const projectResourceTypes = new Set<ProjectResourceType>([
+  'project-root',
+  'folder',
+  'document',
+  'mailbox',
+  'repository',
+  'other',
+]);
+const projectIdPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+const parseProjectCandidates = (value: unknown): readonly ProjectCandidateInput[] | undefined => {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 100) return undefined;
+  const candidates: ProjectCandidateInput[] = [];
+  for (const item of value) {
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) return undefined;
+    const source = item as Record<string, unknown>;
+    const projectId = typeof source.projectId === 'string' ? source.projectId.trim() : '';
+    const displayName = typeof source.displayName === 'string' ? source.displayName.trim() : '';
+    if (!projectIdPattern.test(projectId) || projectId.length > 100) return undefined;
+    if (displayName.length === 0 || displayName.length > 160) return undefined;
+    const description =
+      typeof source.description === 'string' ? source.description.trim() : undefined;
+    if (description !== undefined && description.length > 2_000) return undefined;
+    const aliasesValue = source.aliases ?? [];
+    if (!Array.isArray(aliasesValue) || aliasesValue.length > 25) return undefined;
+    const aliases: string[] = [];
+    for (const aliasValue of aliasesValue) {
+      if (typeof aliasValue !== 'string') return undefined;
+      const alias = aliasValue.trim();
+      if (alias.length === 0 || alias.length > 160) return undefined;
+      aliases.push(alias);
+    }
+    const resourcesValue = source.resources ?? [];
+    if (!Array.isArray(resourcesValue) || resourcesValue.length > 50) return undefined;
+    const resources: NonNullable<ProjectCandidateInput['resources']>[number][] = [];
+    for (const resourceValue of resourcesValue) {
+      if (
+        typeof resourceValue !== 'object' ||
+        resourceValue === null ||
+        Array.isArray(resourceValue)
+      )
+        return undefined;
+      const resource = resourceValue as Record<string, unknown>;
+      const provider = resource.provider;
+      const resourceType = resource.resourceType;
+      const externalId = typeof resource.externalId === 'string' ? resource.externalId.trim() : '';
+      const resourceName =
+        typeof resource.displayName === 'string' ? resource.displayName.trim() : '';
+      if (
+        typeof provider !== 'string' ||
+        !projectProviders.has(provider as ProjectResourceProvider) ||
+        typeof resourceType !== 'string' ||
+        !projectResourceTypes.has(resourceType as ProjectResourceType) ||
+        externalId.length === 0 ||
+        externalId.length > 2_048 ||
+        resourceName.length === 0 ||
+        resourceName.length > 200
+      )
+        return undefined;
+      const canonicalUrl =
+        typeof resource.canonicalUrl === 'string' ? resource.canonicalUrl.trim() : undefined;
+      if (canonicalUrl !== undefined && !canonicalUrl.startsWith('https://')) return undefined;
+      const metadata = resource.metadata;
+      if (
+        metadata !== undefined &&
+        (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata))
+      )
+        return undefined;
+      resources.push({
+        resourceId: `resource:${randomUUID()}`,
+        provider: provider as ProjectResourceProvider,
+        resourceType: resourceType as ProjectResourceType,
+        externalId,
+        displayName: resourceName,
+        ...(canonicalUrl === undefined ? {} : { canonicalUrl }),
+        ...(metadata === undefined ? {} : { metadata: metadata as Record<string, unknown> }),
+      });
+    }
+    candidates.push({
+      projectId,
+      displayName,
+      ...(description === undefined || description.length === 0 ? {} : { description }),
+      aliases,
+      environment: 'production',
+      resources,
+    });
+  }
+  return candidates;
+};
 
 export const kernelStatus = Object.freeze({
   service: 'pendleton-os-api',
@@ -43,6 +149,10 @@ export const buildApi = (
     realtime?: {
       service: RealtimeConversationService;
       principalId: string;
+    };
+    projectRegistry?: {
+      registry: ProjectRegistry;
+      ownerActorId: string;
     };
   } = {},
 ): FastifyInstance => {
@@ -144,6 +254,74 @@ export const buildApi = (
       const code = error instanceof Error ? error.message : 'DEVICE_PAIRING_INVALID';
       return reply.code(code === 'DEVICE_PAIRING_EXPIRED' ? 410 : 400).send({ errors: [{ code }] });
     }
+  });
+  app.get('/v1/projects', async (request, reply) => {
+    if (!authorized(request.headers)) {
+      return reply.code(401).send({ errors: [{ code: 'AUTHENTICATION_REQUIRED' }] });
+    }
+    if (options.projectRegistry === undefined) {
+      return reply.code(503).send({ errors: [{ code: 'PROJECT_REGISTRY_NOT_CONFIGURED' }] });
+    }
+    const { status } = request.query as { status?: string };
+    if (status !== undefined && !projectStatuses.has(status as ProjectStatus)) {
+      return reply.code(400).send({ errors: [{ code: 'PROJECT_STATUS_INVALID' }] });
+    }
+    const projects = await options.projectRegistry.registry.list(
+      status as ProjectStatus | undefined,
+    );
+    return { projects };
+  });
+  app.get('/v1/projects/:projectId', async (request, reply) => {
+    if (!authorized(request.headers)) {
+      return reply.code(401).send({ errors: [{ code: 'AUTHENTICATION_REQUIRED' }] });
+    }
+    if (options.projectRegistry === undefined) {
+      return reply.code(503).send({ errors: [{ code: 'PROJECT_REGISTRY_NOT_CONFIGURED' }] });
+    }
+    const { projectId } = request.params as { projectId: string };
+    const project = await options.projectRegistry.registry.findById(projectId);
+    if (project === undefined)
+      return reply.code(404).send({ errors: [{ code: 'PROJECT_NOT_FOUND' }] });
+    const resources = await options.projectRegistry.registry.getResources(projectId);
+    return { project, resources };
+  });
+  app.post('/v1/projects/import', async (request, reply) => {
+    if (!administratorAuthorized(request.headers.authorization)) {
+      return reply.code(401).send({ errors: [{ code: 'ADMINISTRATOR_AUTHENTICATION_REQUIRED' }] });
+    }
+    if (options.projectRegistry === undefined) {
+      return reply.code(503).send({ errors: [{ code: 'PROJECT_REGISTRY_NOT_CONFIGURED' }] });
+    }
+    const body = request.body as { candidates?: unknown } | undefined;
+    const candidates = parseProjectCandidates(body?.candidates);
+    if (candidates === undefined) {
+      return reply.code(400).send({ errors: [{ code: 'PROJECT_IMPORT_INVALID' }] });
+    }
+    const projects = await options.projectRegistry.registry.importCandidates(
+      candidates,
+      options.projectRegistry.ownerActorId,
+    );
+    return reply.code(201).send({ imported: projects.length, projects });
+  });
+  app.patch('/v1/projects/:projectId', async (request, reply) => {
+    if (!administratorAuthorized(request.headers.authorization)) {
+      return reply.code(401).send({ errors: [{ code: 'ADMINISTRATOR_AUTHENTICATION_REQUIRED' }] });
+    }
+    if (options.projectRegistry === undefined) {
+      return reply.code(503).send({ errors: [{ code: 'PROJECT_REGISTRY_NOT_CONFIGURED' }] });
+    }
+    const { projectId } = request.params as { projectId: string };
+    const body = request.body as { status?: unknown } | undefined;
+    if (typeof body?.status !== 'string' || !projectStatuses.has(body.status as ProjectStatus)) {
+      return reply.code(400).send({ errors: [{ code: 'PROJECT_STATUS_INVALID' }] });
+    }
+    const project = await options.projectRegistry.registry.setStatus(
+      projectId,
+      body.status as ProjectStatus,
+    );
+    return project === undefined
+      ? reply.code(404).send({ errors: [{ code: 'PROJECT_NOT_FOUND' }] })
+      : { project };
   });
   app.post('/v1/commands', async (request, reply) => {
     if (!authorized(request.headers)) {

@@ -100,9 +100,11 @@ export class ContextResolutionService {
         disposition: 'rejected',
         errors: [
           resolutionError(
-            'PROJECT_ARCHIVED',
+            project.status === 'archived' ? 'PROJECT_ARCHIVED' : 'PROJECT_NOT_ACTIVE',
             'authorization',
-            'The resolved project is not active.',
+            project.status === 'archived'
+              ? 'The resolved project is archived.'
+              : 'The resolved project is awaiting activation.',
             { projectId: project.projectId },
           ),
         ],

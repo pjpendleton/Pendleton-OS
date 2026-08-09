@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { buildApi } from '../src/index.js';
 import { DevicePairingService } from '../src/device-pairing.js';
-import { ConversationRuntime, type ConversationRepository } from '@pendleton-os/application';
+import {
+  ConversationRuntime,
+  type ConversationRepository,
+  type ProjectRecord,
+  type ProjectRegistry,
+} from '@pendleton-os/application';
 import type {
   ConversationSession,
   ConversationStatus,
@@ -47,6 +52,142 @@ const conversationRuntime = (): ConversationRuntime => {
     () => new Date('2026-08-07T12:00:00.000Z'),
   );
 };
+
+const projectRegistry = () => {
+  const record: ProjectRecord = {
+    projectId: 'pendleton-os',
+    displayName: 'Pendleton OS',
+    aliases: ['os'],
+    environment: 'production',
+    status: 'active',
+    authorizedActorIds: ['018f1f91-6f3d-7c16-bc61-55f9fa334f12'],
+    resourceIds: ['drive:pendleton-os-root'],
+  };
+  const registry: ProjectRegistry = {
+    findById: (projectId) => Promise.resolve(projectId === record.projectId ? record : undefined),
+    findByAlias: (alias) => Promise.resolve(alias === 'os' ? [record] : []),
+    list: (status) =>
+      Promise.resolve(status === undefined || status === record.status ? [record] : []),
+    getResources: () => Promise.resolve([]),
+    importCandidates: (candidates) =>
+      Promise.resolve(
+        candidates.map((candidate) => ({
+          projectId: candidate.projectId,
+          displayName: candidate.displayName,
+          aliases: candidate.aliases ?? [],
+          environment: candidate.environment ?? 'production',
+          status: 'candidate' as const,
+          authorizedActorIds: [],
+          resourceIds: candidate.resources?.map(({ resourceId }) => resourceId) ?? [],
+        })),
+      ),
+    setStatus: (projectId, status) =>
+      Promise.resolve(projectId === record.projectId ? { ...record, status } : undefined),
+    findResource: () => Promise.resolve(undefined),
+  };
+  return registry;
+};
+
+describe('project registry API', () => {
+  it('lists registered projects for an authenticated client', async () => {
+    const app = buildApi(
+      { execute: () => Promise.resolve({ disposition: 'accepted' }) },
+      {
+        apiToken: 'a'.repeat(32),
+        projectRegistry: {
+          registry: projectRegistry(),
+          ownerActorId: '018f1f91-6f3d-7c16-bc61-55f9fa334f12',
+        },
+      },
+    );
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/projects?status=active',
+      headers: { authorization: `Bearer ${'a'.repeat(32)}` },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      projects: [{ projectId: 'pendleton-os', status: 'active' }],
+    });
+    await app.close();
+  });
+
+  it('imports bounded project candidates without activating them', async () => {
+    const registry = projectRegistry();
+    const importCandidates = vi.spyOn(registry, 'importCandidates');
+    const app = buildApi(
+      { execute: () => Promise.resolve({ disposition: 'accepted' }) },
+      {
+        apiToken: 'a'.repeat(32),
+        projectRegistry: {
+          registry,
+          ownerActorId: '018f1f91-6f3d-7c16-bc61-55f9fa334f12',
+        },
+      },
+    );
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/projects/import',
+      headers: { authorization: `Bearer ${'a'.repeat(32)}` },
+      payload: {
+        candidates: [
+          {
+            projectId: 'parkco-purchase',
+            displayName: 'Parkco Purchase',
+            aliases: ['Parkco'],
+            resources: [
+              {
+                provider: 'local-filesystem',
+                resourceType: 'folder',
+                externalId: 'D:\\Projects\\Parkco Purchase',
+                displayName: 'Parkco Purchase local folder',
+                metadata: { access: 'desktop-only' },
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toMatchObject({
+      imported: 1,
+      projects: [{ projectId: 'parkco-purchase', status: 'candidate' }],
+    });
+    expect(importCandidates).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          projectId: 'parkco-purchase',
+          resources: [expect.objectContaining({ provider: 'local-filesystem' })],
+        }),
+      ],
+      '018f1f91-6f3d-7c16-bc61-55f9fa334f12',
+    );
+    await app.close();
+  });
+
+  it('requires administrator authentication for registry mutations', async () => {
+    const app = buildApi(
+      { execute: () => Promise.resolve({ disposition: 'accepted' }) },
+      {
+        apiToken: 'a'.repeat(32),
+        projectRegistry: {
+          registry: projectRegistry(),
+          ownerActorId: '018f1f91-6f3d-7c16-bc61-55f9fa334f12',
+        },
+      },
+    );
+    expect(
+      (
+        await app.inject({
+          method: 'PATCH',
+          url: '/v1/projects/pendleton-os',
+          payload: { status: 'archived' },
+        })
+      ).statusCode,
+    ).toBe(401);
+    await app.close();
+  });
+});
 
 describe('POST /v1/commands', () => {
   it('routes command requests only through the unified gateway', async () => {

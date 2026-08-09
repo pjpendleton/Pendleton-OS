@@ -31,6 +31,10 @@ const start = async (): Promise<void> => {
       principalId: process.env.PENDLETON_PRINCIPAL_ID ?? 'peter',
       projectId: process.env.PENDLETON_CONVERSATION_PROJECT_ID ?? 'pendleton-os',
     },
+    projectRegistry: {
+      registry: runtime.projects,
+      ownerActorId: process.env.PENDLETON_ACTOR_ID ?? '018f1f91-6f3d-7c16-bc61-55f9fa334f12',
+    },
     ...(runtime.realtime === undefined
       ? {}
       : {

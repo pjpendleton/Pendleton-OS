@@ -4,11 +4,19 @@ import type {
   EventEnvelope,
   EventStore,
   IdempotencyRegistry,
+  ProjectCandidateInput,
+  ProjectRecord,
+  ProjectRegistry,
+  ProjectResourceProvider,
+  ProjectResourceRecord,
+  ProjectResourceType,
+  ProjectStatus,
   ReservationRequest,
   ReservationResult,
   WorkflowInstance,
   WorkflowRepository,
 } from '@pendleton-os/application';
+import type { Environment } from '@pendleton-os/contracts';
 import type {
   ConversationSession,
   ConversationStatus,
@@ -38,6 +46,213 @@ export const createPostgresPool = (connectionString: string): pg.Pool => {
   }
   return new Pool({ connectionString, ssl: { rejectUnauthorized: false }, max: 5 });
 };
+
+interface ProjectRow extends Record<string, unknown> {
+  project_id: string;
+  display_name: string;
+  description: string | null;
+  environment: Environment;
+  status: ProjectStatus;
+}
+
+interface ProjectResourceRow extends Record<string, unknown> {
+  resource_id: string;
+  project_id: string;
+  provider: ProjectResourceProvider;
+  resource_type: ProjectResourceType;
+  external_id: string;
+  display_name: string;
+  canonical_url: string | null;
+  status: 'active' | 'disconnected';
+  metadata: Record<string, unknown>;
+  discovered_at: Date;
+  updated_at: Date;
+}
+
+const mapResource = (row: ProjectResourceRow): ProjectResourceRecord => ({
+  resourceId: row.resource_id,
+  projectId: row.project_id,
+  provider: row.provider,
+  resourceType: row.resource_type,
+  externalId: row.external_id,
+  displayName: row.display_name,
+  ...(row.canonical_url === null ? {} : { canonicalUrl: row.canonical_url }),
+  status: row.status,
+  metadata: row.metadata,
+  discoveredAt: row.discovered_at.toISOString(),
+  updatedAt: row.updated_at.toISOString(),
+});
+
+export class PostgresProjectRegistry implements ProjectRegistry {
+  constructor(private readonly client: SqlClient) {}
+
+  async findById(projectId: string): Promise<ProjectRecord | undefined> {
+    const result = await this.client.query<ProjectRow>(
+      `SELECT project_id,display_name,description,environment,status
+       FROM projects WHERE project_id=$1`,
+      [projectId],
+    );
+    const row = result.rows[0];
+    if (row === undefined) return undefined;
+    const [aliases, members, resources] = await Promise.all([
+      this.client.query<{ alias: string }>(
+        'SELECT alias FROM project_aliases WHERE project_id=$1 ORDER BY alias',
+        [projectId],
+      ),
+      this.client.query<{ actor_id: string }>(
+        `SELECT actor_id FROM project_members
+         WHERE project_id=$1 AND status='active' ORDER BY actor_id`,
+        [projectId],
+      ),
+      this.client.query<{ resource_id: string }>(
+        `SELECT resource_id FROM project_resources
+         WHERE project_id=$1 AND status='active' ORDER BY resource_id`,
+        [projectId],
+      ),
+    ]);
+    return {
+      projectId: row.project_id,
+      displayName: row.display_name,
+      ...(row.description === null ? {} : { description: row.description }),
+      aliases: aliases.rows.map(({ alias }) => alias),
+      environment: row.environment,
+      status: row.status,
+      authorizedActorIds: members.rows.map(({ actor_id }) => actor_id),
+      resourceIds: resources.rows.map(({ resource_id }) => resource_id),
+    };
+  }
+
+  async findByAlias(alias: string): Promise<readonly ProjectRecord[]> {
+    const result = await this.client.query<{ project_id: string }>(
+      `SELECT DISTINCT project_id FROM project_aliases
+       WHERE lower(btrim(alias))=lower(btrim($1)) ORDER BY project_id`,
+      [alias],
+    );
+    const projects = await Promise.all(
+      result.rows.map(({ project_id }) => this.findById(project_id)),
+    );
+    return projects.filter((project): project is ProjectRecord => project !== undefined);
+  }
+
+  async list(status?: ProjectStatus): Promise<readonly ProjectRecord[]> {
+    const result = await this.client.query<{ project_id: string }>(
+      status === undefined
+        ? 'SELECT project_id FROM projects ORDER BY display_name,project_id'
+        : 'SELECT project_id FROM projects WHERE status=$1 ORDER BY display_name,project_id',
+      status === undefined ? [] : [status],
+    );
+    const projects = await Promise.all(
+      result.rows.map(({ project_id }) => this.findById(project_id)),
+    );
+    return projects.filter((project): project is ProjectRecord => project !== undefined);
+  }
+
+  async getResources(projectId: string): Promise<readonly ProjectResourceRecord[]> {
+    const result = await this.client.query<ProjectResourceRow>(
+      `SELECT resource_id,project_id,provider,resource_type,external_id,display_name,
+              canonical_url,status,metadata,discovered_at,updated_at
+       FROM project_resources WHERE project_id=$1 ORDER BY provider,display_name,resource_id`,
+      [projectId],
+    );
+    return result.rows.map(mapResource);
+  }
+
+  async importCandidates(
+    candidates: readonly ProjectCandidateInput[],
+    ownerActorId: string,
+  ): Promise<readonly ProjectRecord[]> {
+    const imported: ProjectRecord[] = [];
+    for (const candidate of candidates) {
+      const now = new Date().toISOString();
+      await this.client.query(
+        `INSERT INTO projects
+          (project_id,display_name,description,environment,status,created_at,updated_at)
+         VALUES ($1,$2,$3,$4,'candidate',$5,$5)
+         ON CONFLICT (project_id) DO UPDATE
+         SET display_name=CASE WHEN projects.status='candidate' THEN EXCLUDED.display_name ELSE projects.display_name END,
+             description=CASE WHEN projects.status='candidate' THEN EXCLUDED.description ELSE projects.description END,
+             updated_at=EXCLUDED.updated_at`,
+        [
+          candidate.projectId,
+          candidate.displayName,
+          candidate.description ?? null,
+          candidate.environment ?? 'production',
+          now,
+        ],
+      );
+      const aliases = new Set([
+        candidate.displayName,
+        candidate.projectId,
+        ...(candidate.aliases ?? []),
+      ]);
+      for (const alias of aliases) {
+        await this.client.query(
+          `INSERT INTO project_aliases (project_id,alias,created_at)
+           VALUES ($1,$2,$3)
+           ON CONFLICT DO NOTHING`,
+          [candidate.projectId, alias.trim(), now],
+        );
+      }
+      await this.client.query(
+        `INSERT INTO project_members (project_id,actor_id,role,status,created_at,updated_at)
+         VALUES ($1,$2,'owner','active',$3,$3)
+         ON CONFLICT (project_id,actor_id) DO UPDATE
+         SET role='owner',status='active',updated_at=EXCLUDED.updated_at`,
+        [candidate.projectId, ownerActorId, now],
+      );
+      for (const resource of candidate.resources ?? []) {
+        await this.client.query(
+          `INSERT INTO project_resources
+            (resource_id,project_id,provider,resource_type,external_id,display_name,canonical_url,status,metadata,discovered_at,updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,'active',$8::jsonb,$9,$9)
+           ON CONFLICT (project_id,provider,resource_type,external_id) DO UPDATE
+           SET display_name=EXCLUDED.display_name,canonical_url=EXCLUDED.canonical_url,
+               status='active',metadata=EXCLUDED.metadata,updated_at=EXCLUDED.updated_at`,
+          [
+            resource.resourceId,
+            candidate.projectId,
+            resource.provider,
+            resource.resourceType,
+            resource.externalId,
+            resource.displayName,
+            resource.canonicalUrl ?? null,
+            JSON.stringify(resource.metadata ?? {}),
+            now,
+          ],
+        );
+      }
+      const project = await this.findById(candidate.projectId);
+      if (project === undefined) throw new Error('PROJECT_IMPORT_READBACK_FAILED');
+      imported.push(project);
+    }
+    return imported;
+  }
+
+  async setStatus(projectId: string, status: ProjectStatus): Promise<ProjectRecord | undefined> {
+    const result = await this.client.query(
+      'UPDATE projects SET status=$2,updated_at=now() WHERE project_id=$1',
+      [projectId, status],
+    );
+    return (result.rowCount ?? 0) === 0 ? undefined : this.findById(projectId);
+  }
+
+  async findResource(
+    projectId: string,
+    provider: ProjectResourceProvider,
+    resourceType: ProjectResourceType,
+  ): Promise<ProjectResourceRecord | undefined> {
+    const result = await this.client.query<ProjectResourceRow>(
+      `SELECT resource_id,project_id,provider,resource_type,external_id,display_name,
+              canonical_url,status,metadata,discovered_at,updated_at
+       FROM project_resources
+       WHERE project_id=$1 AND provider=$2 AND resource_type=$3 AND status='active'
+       ORDER BY updated_at DESC LIMIT 1`,
+      [projectId, provider, resourceType],
+    );
+    const row = result.rows[0];
+    return row === undefined ? undefined : mapResource(row);
+  }
+}
 
 interface EventRow extends Record<string, unknown> {
   event_id: string;

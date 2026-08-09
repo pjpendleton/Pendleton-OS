@@ -9,7 +9,6 @@ import {
   ContextResolutionService,
   EventRecorder,
   InMemoryIdentityDirectory,
-  InMemoryProjectDirectory,
   PolicyEngine,
   RealtimeConversationService,
   UnifiedCommandGateway,
@@ -26,6 +25,7 @@ import {
   PostgresEventStore,
   PostgresConversationRepository,
   PostgresIdempotencyRegistry,
+  PostgresProjectRegistry,
   PostgresWorkflowRepository,
   createPostgresPool,
 } from '@pendleton-os/persistence';
@@ -51,6 +51,7 @@ const secretText = async (environmentName: string, fileName: string): Promise<st
 export interface ProductionRuntime {
   readonly gateway: UnifiedCommandGateway;
   readonly conversations: ConversationRuntime;
+  readonly projects: PostgresProjectRegistry;
   readonly realtime: RealtimeConversationService | undefined;
   readonly readiness: () => Promise<boolean>;
   readonly close: () => Promise<void>;
@@ -71,12 +72,12 @@ export const buildProductionRuntime = async (): Promise<ProductionRuntime> => {
   const oauthClient = clientFile.installed ?? clientFile.web;
   if (!oauthClient?.client_id || !oauthClient.client_secret)
     throw new Error('GOOGLE_CLIENT_INVALID');
-  const rootId = process.env.GOOGLE_DRIVE_ROOT_ID ?? '10IWtfsRSvgiUuN1CrE3nZvFW2XXRRS49';
   const actorId = process.env.PENDLETON_ACTOR_ID ?? '018f1f91-6f3d-7c16-bc61-55f9fa334f12';
   const principalId = process.env.PENDLETON_PRINCIPAL_ID ?? 'peter';
   const pool = createPostgresPool(databaseUrl);
   const driveClient = new GoogleApisDriveClient(createGoogleOAuthClient(oauthClient, tokens));
   const events = new PostgresEventStore(pool);
+  const projects = new PostgresProjectRegistry(pool);
   const conversations = new ConversationRuntime(
     new PostgresConversationRepository(pool),
     randomUUID,
@@ -96,16 +97,7 @@ export const buildProductionRuntime = async (): Promise<ProductionRuntime> => {
       identities: new InMemoryIdentityDirectory([
         { principalId, actor: { actorId, actorType: 'human', roles: ['owner'] }, status: 'active' },
       ]),
-      projects: new InMemoryProjectDirectory([
-        {
-          projectId: 'pendleton-os',
-          aliases: ['os'],
-          environment: 'production',
-          status: 'active',
-          authorizedActorIds: [actorId],
-          resourceIds: [],
-        },
-      ]),
+      projects,
     }),
     intake: new CommandIntakeService({
       catalog: standardCommandCatalog,
@@ -116,8 +108,8 @@ export const buildProductionRuntime = async (): Promise<ProductionRuntime> => {
       drive: new GoogleDriveAdapter({
         client: driveClient,
         projects: {
-          getProjectRoot: (projectId) =>
-            Promise.resolve(projectId === 'pendleton-os' ? rootId : undefined),
+          getProjectRoot: async (projectId) =>
+            (await projects.findResource(projectId, 'google-drive', 'project-root'))?.externalId,
         },
       }),
       verifier: new ArtifactVerifier({
@@ -134,8 +126,13 @@ export const buildProductionRuntime = async (): Promise<ProductionRuntime> => {
   });
   const readiness = async (): Promise<boolean> => {
     try {
-      await pool.query('SELECT 1');
-      return true;
+      const result = await pool.query<{ project_ready: boolean }>(
+        `SELECT EXISTS (
+           SELECT 1 FROM projects
+           WHERE project_id='pendleton-os' AND status='active'
+         ) AS project_ready`,
+      );
+      return result.rows[0]?.project_ready === true;
     } catch {
       return false;
     }
@@ -144,6 +141,7 @@ export const buildProductionRuntime = async (): Promise<ProductionRuntime> => {
   return {
     gateway,
     conversations,
+    projects,
     realtime,
     readiness,
     close: async () => {

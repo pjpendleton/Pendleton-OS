@@ -8,9 +8,11 @@ export interface IdentityRecord {
 
 export interface ProjectRecord {
   readonly projectId: string;
+  readonly displayName?: string;
+  readonly description?: string;
   readonly aliases: readonly string[];
   readonly environment: Environment;
-  readonly status: 'active' | 'archived';
+  readonly status: 'candidate' | 'active' | 'archived';
   readonly authorizedActorIds: readonly string[];
   readonly resourceIds: readonly string[];
 }

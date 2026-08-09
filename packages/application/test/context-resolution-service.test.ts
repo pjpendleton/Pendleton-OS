@@ -51,6 +51,14 @@ const projects: readonly ProjectRecord[] = [
     authorizedActorIds: [ownerId],
     resourceIds: [],
   },
+  {
+    projectId: 'candidate-project',
+    aliases: ['candidate'],
+    environment: 'test',
+    status: 'candidate',
+    authorizedActorIds: [ownerId],
+    resourceIds: [],
+  },
 ];
 
 const createService = () =>
@@ -140,6 +148,17 @@ describe('ContextResolutionService', () => {
     expect(result).toMatchObject({
       disposition: 'rejected',
       errors: [{ code: 'PROJECT_ARCHIVED' }],
+    });
+  });
+
+  it('rejects a discovered project until it is explicitly activated', async () => {
+    const result = await createService().resolve({
+      principalId: 'google:owner@example.test',
+      project: { projectId: 'candidate-project' },
+    });
+    expect(result).toMatchObject({
+      disposition: 'rejected',
+      errors: [{ code: 'PROJECT_NOT_ACTIVE' }],
     });
   });
 

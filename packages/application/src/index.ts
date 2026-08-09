@@ -32,6 +32,15 @@ export {
   type ProjectRecord,
 } from './context-resolution/directories.js';
 export {
+  type ProjectCandidateInput,
+  type ProjectRegistry,
+  type ProjectResourceInput,
+  type ProjectResourceProvider,
+  type ProjectResourceRecord,
+  type ProjectResourceType,
+  type ProjectStatus,
+} from './project-registry/project-registry.js';
+export {
   PolicyEngine,
   POLICY_VERSION,
   type DataClassification,
