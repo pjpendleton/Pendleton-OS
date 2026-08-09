@@ -5,6 +5,7 @@ import {
 } from '@pendleton-os/contracts';
 import type {
   ConversationRuntime,
+  EmailAccessService,
   ProjectCandidateInput,
   ProjectRegistry,
   ProjectResourceProvider,
@@ -153,6 +154,11 @@ export const buildApi = (
     projectRegistry?: {
       registry: ProjectRegistry;
       ownerActorId: string;
+    };
+    email?: {
+      service: EmailAccessService;
+      actorId: string;
+      defaultProjectId: string;
     };
   } = {},
 ): FastifyInstance => {
@@ -322,6 +328,58 @@ export const buildApi = (
     return project === undefined
       ? reply.code(404).send({ errors: [{ code: 'PROJECT_NOT_FOUND' }] })
       : { project };
+  });
+  app.get('/v1/email/connectors', async (request, reply) => {
+    if (!authorized(request.headers)) {
+      return reply.code(401).send({ errors: [{ code: 'AUTHENTICATION_REQUIRED' }] });
+    }
+    if (options.email === undefined) {
+      return reply.code(503).send({ errors: [{ code: 'EMAIL_NOT_CONFIGURED' }] });
+    }
+    return { connectors: await options.email.service.statuses() };
+  });
+  app.post('/v1/email/search', async (request, reply) => {
+    if (!authorized(request.headers)) {
+      return reply.code(401).send({ errors: [{ code: 'AUTHENTICATION_REQUIRED' }] });
+    }
+    if (options.email === undefined) {
+      return reply.code(503).send({ errors: [{ code: 'EMAIL_NOT_CONFIGURED' }] });
+    }
+    const body = request.body as Record<string, unknown> | undefined;
+    const provider = body?.provider;
+    const query = typeof body?.query === 'string' ? body.query : '';
+    const projectId =
+      typeof body?.projectId === 'string' ? body.projectId : options.email.defaultProjectId;
+    const maxResults = body?.maxResults;
+    if (provider !== 'gmail' && provider !== 'microsoft-graph') {
+      return reply.code(400).send({ errors: [{ code: 'EMAIL_PROVIDER_INVALID' }] });
+    }
+    if (maxResults !== undefined && typeof maxResults !== 'number') {
+      return reply.code(400).send({ errors: [{ code: 'EMAIL_RESULT_LIMIT_INVALID' }] });
+    }
+    try {
+      const messages = await options.email.service.search({
+        actorId: options.email.actorId,
+        projectId,
+        provider,
+        query,
+        ...(maxResults === undefined ? {} : { maxResults }),
+      });
+      return { projectId, provider, permissionMode: 'read-only', messages };
+    } catch (error) {
+      const code = error instanceof Error ? error.message : 'EMAIL_INTERNAL_ERROR';
+      const status =
+        code === 'PROJECT_NOT_FOUND'
+          ? 404
+          : code === 'PROJECT_NOT_ACTIVE' || code === 'PROJECT_ACCESS_DENIED'
+            ? 403
+            : code.includes('UNCONFIGURED') || code.includes('AUTHORIZATION_REQUIRED')
+              ? 409
+              : code.includes('INVALID')
+                ? 400
+                : 502;
+      return reply.code(status).send({ errors: [{ code }] });
+    }
   });
   app.post('/v1/commands', async (request, reply) => {
     if (!authorized(request.headers)) {

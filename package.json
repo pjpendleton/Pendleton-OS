@@ -21,6 +21,7 @@
     "test": "vitest run",
     "typecheck": "tsc -b",
     "google:authorize": "node scripts/google-oauth-authorize.mjs",
+    "microsoft:authorize": "node scripts/microsoft-oauth-authorize.mjs",
     "google:bootstrap": "node scripts/google-drive-bootstrap.mjs",
     "database:secret": "node scripts/create-database-runtime-secret.mjs",
     "database:smoke": "node scripts/database-smoke.mjs",
@@ -38,5 +39,8 @@
     "typescript-eslint": "8.66.0",
     "googleapis": "174.0.1",
     "vitest": "3.2.7"
+  },
+  "overrides": {
+    "gaxios": "7.3.0"
   }
 }

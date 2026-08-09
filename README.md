@@ -55,6 +55,11 @@ PROJECT-001 persists project identity, aliases, memberships, and provider resour
 PostgreSQL. Discovered folders enter as non-operational candidates and require explicit
 administrative activation before command or voice use. See `docs/PROJECT-REGISTRY-V1.md`.
 
+EMAIL-001 adds provider-neutral, read-only Gmail and Microsoft Graph search. Searches require an
+active authorized project, return bounded message metadata and previews, and append an audit event
+containing a query hash instead of mailbox content. Account authorization remains an explicit OAuth
+step. See `docs/EMAIL-CONNECTORS-V1.md`.
+
 ## Prerequisites
 
 - Node.js 24 LTS

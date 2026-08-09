@@ -1,6 +1,6 @@
 # Pendleton OS Project Registry v1
 
-Status: Production database deployed; API deployment pending
+Status: Production deployed and verified
 
 Version: 1.0.0
 
@@ -37,4 +37,4 @@ All four tables have row-level security enabled. Only the dedicated `pendleton_r
 
 ## Email boundary
 
-The registry can represent Gmail and Microsoft Graph mailboxes, but v1 does not authorize or synchronize email. Email connectors must begin read-only, store credentials only in the production secret store, and associate messages to active projects using auditable classification evidence. Sending, deletion, filing, and other mailbox mutations remain out of scope until separately approved and policy-gated.
+The registry can represent Gmail and Microsoft Graph mailboxes. The separate EMAIL-001 service begins with on-demand read-only search, stores credentials only in the production secret store, and requires an active project plus an auditable access event. Sending, deletion, filing, and other mailbox mutations remain out of scope until separately approved and policy-gated.

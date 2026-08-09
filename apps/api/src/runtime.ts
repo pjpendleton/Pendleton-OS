@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -7,16 +7,21 @@ import {
   ConversationRuntime,
   CommandIntakeService,
   ContextResolutionService,
+  EmailAccessService,
   EventRecorder,
   InMemoryIdentityDirectory,
   PolicyEngine,
   RealtimeConversationService,
   UnifiedCommandGateway,
   standardCommandCatalog,
+  type ReadOnlyEmailClient,
 } from '@pendleton-os/application';
 import {
   GoogleApisDriveClient,
+  GoogleApisGmailClient,
   GoogleDriveAdapter,
+  MicrosoftDelegatedTokenProvider,
+  MicrosoftGraphMailClient,
   OpenAIRealtimeProvider,
   VerifiedDriveWorkflowDispatcher,
   createGoogleOAuthClient,
@@ -52,6 +57,7 @@ export interface ProductionRuntime {
   readonly gateway: UnifiedCommandGateway;
   readonly conversations: ConversationRuntime;
   readonly projects: PostgresProjectRegistry;
+  readonly email: EmailAccessService;
   readonly realtime: RealtimeConversationService | undefined;
   readonly readiness: () => Promise<boolean>;
   readonly close: () => Promise<void>;
@@ -78,6 +84,33 @@ export const buildProductionRuntime = async (): Promise<ProductionRuntime> => {
   const driveClient = new GoogleApisDriveClient(createGoogleOAuthClient(oauthClient, tokens));
   const events = new PostgresEventStore(pool);
   const projects = new PostgresProjectRegistry(pool);
+  const emailClients: ReadOnlyEmailClient[] = [
+    new GoogleApisGmailClient(createGoogleOAuthClient(oauthClient, tokens)),
+  ];
+  const microsoftClientId = process.env.MICROSOFT_OAUTH_CLIENT_ID;
+  const microsoftTokens = process.env.MICROSOFT_OAUTH_TOKEN_BASE64
+    ? (decodeJson(process.env.MICROSOFT_OAUTH_TOKEN_BASE64) as {
+        access_token: string;
+        refresh_token?: string;
+        expires_at?: number;
+        expires_in?: number;
+      })
+    : undefined;
+  if (microsoftClientId !== undefined && microsoftTokens !== undefined) {
+    emailClients.push(
+      new MicrosoftGraphMailClient(
+        new MicrosoftDelegatedTokenProvider(
+          microsoftClientId,
+          microsoftTokens,
+          process.env.MICROSOFT_TENANT_ID ?? 'common',
+        ),
+      ),
+    );
+  }
+  const eventRecorder = new EventRecorder({ store: events });
+  const email = new EmailAccessService(emailClients, projects, eventRecorder, randomUUID, (value) =>
+    createHash('sha256').update(value).digest('hex'),
+  );
   const conversations = new ConversationRuntime(
     new PostgresConversationRepository(pool),
     randomUUID,
@@ -117,7 +150,7 @@ export const buildProductionRuntime = async (): Promise<ProductionRuntime> => {
         now: () => new Date(),
         createId: randomUUID,
       }),
-      events: new EventRecorder({ store: events }),
+      events: eventRecorder,
       workflows,
       createId: randomUUID,
     }),
@@ -142,6 +175,7 @@ export const buildProductionRuntime = async (): Promise<ProductionRuntime> => {
     gateway,
     conversations,
     projects,
+    email,
     realtime,
     readiness,
     close: async () => {

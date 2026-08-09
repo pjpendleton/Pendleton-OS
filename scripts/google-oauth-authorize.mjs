@@ -8,6 +8,11 @@ const secretsDirectory = join(homedir(), 'AppData', 'Local', 'PendletonOS', 'sec
 const clientPath = join(secretsDirectory, 'google-oauth-client.json');
 const tokenPath = join(secretsDirectory, 'google-oauth-token.json');
 const clientFile = JSON.parse(await readFile(clientPath, 'utf8'));
+const existingTokens = await readFile(tokenPath, 'utf8')
+  // Token parsing is intentionally confined to the local secret file.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+  .then((value) => JSON.parse(value))
+  .catch(() => ({}));
 const client = clientFile.installed ?? clientFile.web;
 if (!client?.client_id || !client?.client_secret) throw new Error('GOOGLE_OAUTH_CLIENT_INVALID');
 
@@ -20,8 +25,12 @@ const oauth = new google.auth.OAuth2(client.client_id, client.client_secret, red
 const state = crypto.randomUUID();
 const authorizationUrl = oauth.generateAuthUrl({
   access_type: 'offline',
+  include_granted_scopes: true,
   prompt: 'consent',
-  scope: ['https://www.googleapis.com/auth/drive.file'],
+  scope: [
+    'https://www.googleapis.com/auth/drive.file',
+    'https://www.googleapis.com/auth/gmail.readonly',
+  ],
   state,
 });
 
@@ -34,8 +43,13 @@ server.on('request', async (request, response) => {
     const code = url.searchParams.get('code');
     if (!code) throw new Error('OAUTH_CODE_MISSING');
     const { tokens } = await oauth.getToken(code);
-    if (!tokens.refresh_token) throw new Error('OAUTH_REFRESH_TOKEN_MISSING');
-    await writeFile(tokenPath, `${JSON.stringify(tokens, null, 2)}\n`, { mode: 0o600 });
+    const mergedTokens = {
+      ...existingTokens,
+      ...tokens,
+      refresh_token: tokens.refresh_token ?? existingTokens.refresh_token,
+    };
+    if (!mergedTokens.refresh_token) throw new Error('OAUTH_REFRESH_TOKEN_MISSING');
+    await writeFile(tokenPath, `${JSON.stringify(mergedTokens, null, 2)}\n`, { mode: 0o600 });
     response.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
     response.end('Pendleton OS Google authorization completed. You may close this tab.');
     console.log('AUTHORIZATION_COMPLETE');

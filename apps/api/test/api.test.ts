@@ -3,6 +3,7 @@ import { buildApi } from '../src/index.js';
 import { DevicePairingService } from '../src/device-pairing.js';
 import {
   ConversationRuntime,
+  type EmailAccessService,
   type ConversationRepository,
   type ProjectRecord,
   type ProjectRegistry,
@@ -185,6 +186,85 @@ describe('project registry API', () => {
         })
       ).statusCode,
     ).toBe(401);
+    await app.close();
+  });
+});
+
+describe('read-only email API', () => {
+  it('reports connector state and performs an authenticated bounded search', async () => {
+    const search = vi.fn().mockResolvedValue([
+      {
+        provider: 'gmail',
+        accountId: 'owner@example.com',
+        messageId: 'message-1',
+        subject: 'Project update',
+        recipients: [],
+        snippet: 'Status',
+      },
+    ]);
+    const service = {
+      statuses: () =>
+        Promise.resolve([
+          {
+            provider: 'gmail' as const,
+            state: 'ready' as const,
+            permissionMode: 'read-only' as const,
+            accountId: 'owner@example.com',
+          },
+        ]),
+      search,
+    } as unknown as EmailAccessService;
+    const app = buildApi(
+      { execute: () => Promise.resolve({ disposition: 'accepted' }) },
+      {
+        apiToken: 'a'.repeat(32),
+        email: {
+          service,
+          actorId: '00000000-0000-4000-8000-000000000001',
+          defaultProjectId: 'pendleton-os',
+        },
+      },
+    );
+    const authorization = `Bearer ${'a'.repeat(32)}`;
+    expect(
+      (await app.inject({ method: 'GET', url: '/v1/email/connectors', headers: { authorization } }))
+        .statusCode,
+    ).toBe(200);
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/email/search',
+      headers: { authorization },
+      payload: { provider: 'gmail', query: 'title report', maxResults: 5 },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      projectId: 'pendleton-os',
+      permissionMode: 'read-only',
+      messages: [{ subject: 'Project update' }],
+    });
+    expect(search).toHaveBeenCalledWith({
+      actorId: '00000000-0000-4000-8000-000000000001',
+      projectId: 'pendleton-os',
+      provider: 'gmail',
+      query: 'title report',
+      maxResults: 5,
+    });
+    await app.close();
+  });
+
+  it('does not expose connector status without authentication', async () => {
+    const app = buildApi(
+      { execute: () => Promise.resolve({ disposition: 'accepted' }) },
+      {
+        apiToken: 'a'.repeat(32),
+        email: {
+          service: { statuses: vi.fn(), search: vi.fn() } as unknown as EmailAccessService,
+          actorId: '00000000-0000-4000-8000-000000000001',
+          defaultProjectId: 'pendleton-os',
+        },
+      },
+    );
+    expect((await app.inject({ method: 'GET', url: '/v1/email/connectors' })).statusCode).toBe(401);
     await app.close();
   });
 });

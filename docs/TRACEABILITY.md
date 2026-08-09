@@ -18,6 +18,7 @@
 | Verified Drive vertical slice     | System Design canonical kernel path; API Contract v1       | KRN-012     |
 | Operational hardening             | Technology Profile sections 8, 13, 15, 17                  | KRN-013     |
 | Durable project registry          | System Design project context; API Contract v1             | PROJECT-001 |
+| Read-only email search            | System Design adapters; ADR-004; Policy Matrix v1          | EMAIL-001   |
 
 Every future material behavior, schema, workflow, provider mutation, or public interface must
 add or update its traceability entry in the same controlled change.

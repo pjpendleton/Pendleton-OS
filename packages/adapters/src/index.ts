@@ -11,3 +11,8 @@ export {
   createGoogleOAuthClient,
 } from './google-drive/googleapis-drive-client.js';
 export { OpenAIRealtimeProvider } from './openai-realtime/openai-realtime-provider.js';
+export { GoogleApisGmailClient } from './email/googleapis-gmail-client.js';
+export {
+  MicrosoftDelegatedTokenProvider,
+  MicrosoftGraphMailClient,
+} from './email/microsoft-graph-mail-client.js';

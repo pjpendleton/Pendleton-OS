@@ -96,3 +96,13 @@ export {
   type RealtimeSessionConfiguration,
   type RealtimeSessionProvider,
 } from './conversation/realtime-conversation-service.js';
+export {
+  EmailAccessService,
+  type EmailAddress,
+  type EmailConnectorState,
+  type EmailConnectorStatus,
+  type EmailMessageSummary,
+  type EmailProvider,
+  type EmailSearchRequest,
+  type ReadOnlyEmailClient,
+} from './email/email-access-service.js';
