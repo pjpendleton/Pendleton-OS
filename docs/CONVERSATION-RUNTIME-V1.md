@@ -2,9 +2,9 @@
 
 Status: Production deployed with realtime voice and secure mobile device pairing
 
-Version: 1.1.0
+Version: 1.1.1
 
-Date: 2026-08-07
+Date: 2026-08-08
 
 ## Purpose
 
@@ -33,7 +33,7 @@ All routes require an authenticated Pendleton OS principal. Administrative calle
 
 `conversation_sessions` stores session identity, project scope, channel, driving mode, lifecycle state, and activity timestamps. `conversation_turns` stores ordered turns and optional command/correlation identifiers. Foreign keys, check constraints, unique idempotency keys, and resume indexes enforce the durable contract.
 
-The migration explicitly revokes access from Supabase `anon` and `authenticated` roles. Pendleton OS accesses these internal tables only through its server-side PostgreSQL connection. No browser or mobile client receives direct database credentials.
+The migrations explicitly revoke access from Supabase `anon` and `authenticated` roles. Pendleton OS accesses these internal tables only through the dedicated `pendleton_runtime` server-side PostgreSQL role. That role has only the table and sequence privileges required to read, create, and update conversation records, with matching row-level security policies. No browser or mobile client receives direct database credentials.
 
 ## Deliberate v1 boundary
 
