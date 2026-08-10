@@ -1,10 +1,10 @@
 # Pendleton OS Project Knowledge Retrieval v1
 
-Status: Implementation verified; production deployment pending
+Status: Production deployed and verified
 
 Version: 1.0.0
 
-Date: 2026-08-09
+Date: 2026-08-10
 
 ## Purpose
 
@@ -82,3 +82,17 @@ tokens, or refresh tokens.
 Successful underlying mailbox searches continue to append their provider-specific
 `email.search.completed` events. This gives the audit trail both one conversational retrieval event
 and the exact provider reads that supported it.
+
+## Production verification
+
+Release `31276bc` was deployed to `https://os.peterpendleton.com` through Hostinger deployment
+`019febd8-28cf-7074-9c61-e21d1e543109` on 2026-08-10. The production acceptance check confirmed:
+
+- the readiness endpoint reported `ready`;
+- Gmail and Microsoft Graph reported `ready` with read-only access;
+- Google Drive, Gmail, and Microsoft Graph participated in a project-scoped knowledge search;
+- the query `Book Charter` returned governed Google Drive records, including the Book Charter and
+  accepted architecture decisions;
+- voice capabilities advertised `knowledge.search`; and
+- the persisted `knowledge.search.completed` event contained provider counts and a 64-character
+  SHA-256 query hash, without query text, result items, or source content.
