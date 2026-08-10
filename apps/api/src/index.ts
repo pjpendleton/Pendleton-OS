@@ -176,6 +176,7 @@ export const buildApi = (
   app.addContentTypeParser('application/sdp', { parseAs: 'string' }, (_request, body, done) => {
     done(null, body);
   });
+  app.get('/', (_request, reply) => reply.redirect('/voice'));
   app.get('/health/live', () => ({ status: 'alive' }));
   app.get('/voice', (_request, reply) => reply.type('text/html').send(voiceClientPage));
   app.get('/pair', (_request, reply) =>
@@ -736,6 +737,7 @@ export const buildApi = (
       'search_project_knowledge',
       'propose_artifact_create',
       'capture_follow_up',
+      'list_projects',
       'select_project',
     ]);
     if (callId.length < 8 || callId.length > 200) {
@@ -763,6 +765,22 @@ export const buildApi = (
           query,
           maxResults,
         });
+      } else if (name === 'list_projects') {
+        if (options.projectRegistry === undefined)
+          throw new Error('PROJECT_REGISTRY_NOT_CONFIGURED');
+        const projects = (await options.projectRegistry.registry.list('active'))
+          .filter((project) =>
+            project.authorizedActorIds.includes(options.projectRegistry?.ownerActorId ?? ''),
+          )
+          .slice(0, 50)
+          .map((project) => ({
+            projectId: project.projectId,
+            displayName: project.displayName ?? project.projectId,
+            description: project.description ?? '',
+            aliases: project.aliases,
+            current: project.projectId === snapshot.session.projectId,
+          }));
+        result = { projects };
       } else if (name === 'select_project') {
         if (options.projectRegistry === undefined)
           throw new Error('PROJECT_REGISTRY_NOT_CONFIGURED');

@@ -556,6 +556,14 @@ describe('health endpoints', () => {
 });
 
 describe('mobile voice client', () => {
+  it('redirects the public root to the voice client', async () => {
+    const app = buildApi({ execute: () => Promise.resolve({ disposition: 'accepted' }) });
+    const response = await app.inject({ method: 'GET', url: '/' });
+    expect(response.statusCode).toBe(302);
+    expect(response.headers.location).toBe('/voice');
+    await app.close();
+  });
+
   it('serves the WebRTC client without embedding credentials', async () => {
     const app = buildApi({ execute: () => Promise.resolve({ disposition: 'accepted' }) });
     const response = await app.inject({ method: 'GET', url: '/voice' });
@@ -829,6 +837,51 @@ describe('conversation runtime API', () => {
     expect(executed.json()).toMatchObject({
       ok: true,
       result: { projectId: 'pendleton-os', displayName: 'Pendleton OS' },
+    });
+    const resumed = await runtime.resume(sessionId, 'peter');
+    expect(resumed.turns).toMatchObject([{ role: 'tool', kind: 'action_result' }]);
+    await app.close();
+  });
+
+  it('lists only active projects authorized to the owner through the voice broker', async () => {
+    const runtime = conversationRuntime();
+    const registry = projectRegistry();
+    const app = buildApi(
+      { execute: () => Promise.resolve({ disposition: 'accepted' }) },
+      {
+        apiToken: 'a'.repeat(32),
+        conversation: { runtime, principalId: 'peter', projectId: 'pendleton-os' },
+        projectRegistry: {
+          registry,
+          ownerActorId: '018f1f91-6f3d-7c16-bc61-55f9fa334f12',
+        },
+      },
+    );
+    const auth = { authorization: `Bearer ${'a'.repeat(32)}` };
+    const created = await app.inject({
+      method: 'POST',
+      url: '/v1/conversations',
+      headers: auth,
+      payload: { channel: 'voice', drivingMode: true },
+    });
+    const sessionId = created.json<{ sessionId: string }>().sessionId;
+    const executed = await app.inject({
+      method: 'POST',
+      url: `/v1/conversations/${sessionId}/tools`,
+      headers: auth,
+      payload: { callId: 'call_project_list_123', name: 'list_projects', arguments: {} },
+    });
+    expect(executed.json()).toMatchObject({
+      ok: true,
+      result: {
+        projects: [
+          {
+            projectId: 'pendleton-os',
+            displayName: 'Pendleton OS',
+            current: true,
+          },
+        ],
+      },
     });
     const resumed = await runtime.resume(sessionId, 'peter');
     expect(resumed.turns).toMatchObject([{ role: 'tool', kind: 'action_result' }]);

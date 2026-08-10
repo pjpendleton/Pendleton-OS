@@ -117,6 +117,7 @@ export const voiceClientPage = `<!doctype html>
                 search_project_knowledge: ['Searching project','Checking Google Drive, Gmail, and Outlook...'],
                 propose_artifact_create: ['Checking action','Applying Pendleton OS policy and verification controls...'],
                 capture_follow_up: ['Capturing follow-up','Saving it through Pendleton OS controls...'],
+                list_projects: ['Listing projects','Checking the governed project registry...'],
                 select_project: ['Selecting project','Checking the governed project registry...']
               };
               const statusMessage = statusMessages[message.item.name] || ['Working','Applying Pendleton OS controls...'];

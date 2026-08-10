@@ -2,7 +2,7 @@
 
 Status: Production deployed with realtime voice and secure mobile device pairing
 
-Version: 1.3.0
+Version: 1.4.0
 
 Date: 2026-08-10
 
@@ -50,6 +50,6 @@ The mobile page starts and closes durable voice sessions, requests microphone ac
 
 The browser forwards only normalized final transcript events and model function-call envelopes to the authenticated conversation API. Tool dispatch, active-project scope, policy evaluation, verification, and durable result recording occur on the server. Final user and assistant transcripts are retried and written idempotently. Closing a session produces a bounded durable recap, and subsequent sessions for the same principal and project receive recent recaps as project memory.
 
-`select_project` resolves a natural project name through the governed alias registry and changes the session scope only for one unambiguous, active, authorized project. `capture_follow_up` converts an explicit request to remember or track an action into the same verified internal-artifact workflow used by other voice actions.
+`list_projects` returns a bounded list of active projects authorized to the owner and identifies the current conversation project without exposing membership or resource internals. `select_project` resolves a natural project name through the governed alias registry and changes the session scope only for one unambiguous, active, authorized project. `capture_follow_up` converts an explicit request to remember or track an action into the same verified internal-artifact workflow used by other voice actions.
 
 Provider-native sideband WebSocket control remains a future transport hardening option. The v1.3 authority boundary does not depend on browser-owned business logic: the browser transports the function-call envelope, while Pendleton OS alone validates and executes it.
