@@ -16,12 +16,22 @@ export interface ConversationRepository {
     status: ConversationStatus,
     at: string,
   ): Promise<ConversationSession | undefined>;
+  updateSessionProject(
+    sessionId: string,
+    projectId: string,
+    at: string,
+  ): Promise<ConversationSession | undefined>;
   appendTurn(input: Omit<ConversationTurn, 'sequence'>): Promise<ConversationTurn>;
   findTurnByIdempotencyKey(
     sessionId: string,
     idempotencyKey: string,
   ): Promise<ConversationTurn | undefined>;
   listTurns(sessionId: string, limit: number): Promise<readonly ConversationTurn[]>;
+  listProjectSummaries(
+    principalId: string,
+    projectId: string,
+    limit: number,
+  ): Promise<readonly ConversationTurn[]>;
 }
 
 export interface StartConversationRequest {
@@ -105,7 +115,20 @@ export class ConversationRuntime {
   }
 
   async close(sessionId: string, principalId: string): Promise<ConversationSession> {
-    await this.requireOwnedSession(sessionId, principalId);
+    const session = await this.requireOwnedSession(sessionId, principalId);
+    if (session.status === 'closed') return session;
+    const turns = await this.repository.listTurns(sessionId, 50);
+    const recap = this.buildRecap(turns);
+    if (recap.length > 0) {
+      await this.append({
+        sessionId,
+        principalId,
+        role: 'system',
+        kind: 'summary',
+        text: recap,
+        idempotencyKey: `session-summary:${sessionId}`,
+      });
+    }
     const updated = await this.repository.updateSessionStatus(
       sessionId,
       'closed',
@@ -113,6 +136,53 @@ export class ConversationRuntime {
     );
     if (updated === undefined) throw new Error('CONVERSATION_NOT_FOUND');
     return updated;
+  }
+
+  async switchProject(
+    sessionId: string,
+    principalId: string,
+    projectId: string,
+  ): Promise<ConversationSession> {
+    const session = await this.requireOwnedSession(sessionId, principalId);
+    if (session.status === 'closed') throw new Error('CONVERSATION_CLOSED');
+    const normalizedProjectId = projectId.trim();
+    if (normalizedProjectId.length === 0) throw new Error('PROJECT_SELECTOR_INVALID');
+    const updated = await this.repository.updateSessionProject(
+      sessionId,
+      normalizedProjectId,
+      this.now().toISOString(),
+    );
+    if (updated === undefined) throw new Error('CONVERSATION_NOT_FOUND');
+    return updated;
+  }
+
+  async projectMemory(
+    principalId: string,
+    projectId: string,
+    limit = 5,
+  ): Promise<readonly ConversationTurn[]> {
+    return this.repository.listProjectSummaries(
+      principalId,
+      projectId,
+      Math.min(Math.max(limit, 1), 10),
+    );
+  }
+
+  private buildRecap(turns: readonly ConversationTurn[]): string {
+    const labels: Readonly<Record<ConversationRole, string>> = {
+      user: 'Peter',
+      assistant: 'Pendleton OS',
+      system: 'System',
+      tool: 'Action',
+    };
+    const lines = turns
+      .filter((turn) => turn.kind !== 'summary')
+      .slice(-12)
+      .map((turn) => {
+        const compact = turn.text.replace(/\s+/g, ' ').trim();
+        return `- ${labels[turn.role]}: ${compact.slice(0, 400)}`;
+      });
+    return lines.length === 0 ? '' : `Conversation recap:\n${lines.join('\n')}`.slice(0, 5_000);
   }
 
   private async requireOwnedSession(

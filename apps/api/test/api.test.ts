@@ -36,6 +36,13 @@ const conversationRuntime = (): ConversationRuntime => {
       sessions.set(sessionId, updated);
       return Promise.resolve(updated);
     },
+    updateSessionProject: (sessionId, projectId, at) => {
+      const current = sessions.get(sessionId);
+      if (current === undefined) return Promise.resolve(undefined);
+      const updated = { ...current, projectId, lastActivityAt: at };
+      sessions.set(sessionId, updated);
+      return Promise.resolve(updated);
+    },
     appendTurn: (input) => {
       const turn = { ...input, sequence: turns.length + 1 };
       turns.push(turn);
@@ -47,6 +54,20 @@ const conversationRuntime = (): ConversationRuntime => {
       ),
     listTurns: (sessionId, limit) =>
       Promise.resolve(turns.filter((turn) => turn.sessionId === sessionId).slice(-limit)),
+    listProjectSummaries: (principalId, projectId, limit) => {
+      const sessionIds = new Set(
+        [...sessions.values()]
+          .filter(
+            (session) => session.principalId === principalId && session.projectId === projectId,
+          )
+          .map((session) => session.sessionId),
+      );
+      return Promise.resolve(
+        turns
+          .filter((turn) => sessionIds.has(turn.sessionId) && turn.kind === 'summary')
+          .slice(-limit),
+      );
+    },
   };
   return new ConversationRuntime(
     repository,
@@ -725,6 +746,92 @@ describe('conversation runtime API', () => {
       responseStyle: 'brief',
       turns: [{ text: 'Good morning.' }],
     });
+    await app.close();
+  });
+
+  it('durably ingests idempotent realtime transcripts', async () => {
+    const app = buildApi(
+      { execute: () => Promise.resolve({ disposition: 'accepted' }) },
+      {
+        apiToken: 'a'.repeat(32),
+        conversation: {
+          runtime: conversationRuntime(),
+          principalId: 'peter',
+          projectId: 'pendleton-os',
+        },
+      },
+    );
+    const auth = { authorization: `Bearer ${'a'.repeat(32)}` };
+    const created = await app.inject({
+      method: 'POST',
+      url: '/v1/conversations',
+      headers: auth,
+      payload: { channel: 'voice', drivingMode: true },
+    });
+    const sessionId = created.json<{ sessionId: string }>().sessionId;
+    const payload = {
+      type: 'user_transcript',
+      eventId: 'item_input_123',
+      text: 'Capture the permit follow-up.',
+    };
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/v1/conversations/${sessionId}/realtime-events`,
+          headers: auth,
+          payload,
+        })
+      ).statusCode,
+    ).toBe(201);
+    await app.inject({
+      method: 'POST',
+      url: `/v1/conversations/${sessionId}/realtime-events`,
+      headers: auth,
+      payload,
+    });
+    const resumed = await app.inject({
+      method: 'GET',
+      url: `/v1/conversations/${sessionId}`,
+      headers: auth,
+    });
+    expect(resumed.json<{ turns: ConversationTurn[] }>().turns).toHaveLength(1);
+    await app.close();
+  });
+
+  it('brokers project selection through the server and records the tool result', async () => {
+    const runtime = conversationRuntime();
+    const app = buildApi(
+      { execute: () => Promise.resolve({ disposition: 'accepted' }) },
+      {
+        apiToken: 'a'.repeat(32),
+        conversation: { runtime, principalId: 'peter', projectId: 'pendleton-os' },
+        projectRegistry: {
+          registry: projectRegistry(),
+          ownerActorId: '018f1f91-6f3d-7c16-bc61-55f9fa334f12',
+        },
+      },
+    );
+    const auth = { authorization: `Bearer ${'a'.repeat(32)}` };
+    const created = await app.inject({
+      method: 'POST',
+      url: '/v1/conversations',
+      headers: auth,
+      payload: { channel: 'voice', drivingMode: true },
+    });
+    const sessionId = created.json<{ sessionId: string }>().sessionId;
+    const executed = await app.inject({
+      method: 'POST',
+      url: `/v1/conversations/${sessionId}/tools`,
+      headers: auth,
+      payload: { callId: 'call_project_123', name: 'select_project', arguments: { alias: 'os' } },
+    });
+    expect(executed.json()).toMatchObject({
+      ok: true,
+      result: { projectId: 'pendleton-os', displayName: 'Pendleton OS' },
+    });
+    const resumed = await runtime.resume(sessionId, 'peter');
+    expect(resumed.turns).toMatchObject([{ role: 'tool', kind: 'action_result' }]);
     await app.close();
   });
 

@@ -50,11 +50,34 @@ export const voiceClientPage = `<!doctype html>
     const speaker = document.querySelector('#speaker');
     const pairing = document.querySelector('#pairing');
     let pc, dc, stream, sessionId;
+    let transcriptQueue = Promise.resolve();
     const show = (title, message) => { state.textContent = title; detail.textContent = message; };
     const api = async (path, options = {}) => {
       const response = await fetch(path, { ...options, headers: { ...(options.headers || {}) } });
       if (!response.ok) throw new Error((await response.text()) || ('HTTP ' + response.status));
       return response;
+    };
+    const queueTranscript = (type, eventId, text) => {
+      if (!sessionId || !eventId || !text?.trim()) return;
+      const targetSession = sessionId;
+      transcriptQueue = transcriptQueue.catch(() => {}).then(async () => {
+        let lastError;
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          try {
+            await api('/v1/conversations/' + targetSession + '/realtime-events', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ type, eventId, text }),
+              keepalive: true
+            });
+            return;
+          } catch (error) {
+            lastError = error;
+            await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)));
+          }
+        }
+        throw lastError;
+      });
     };
     const reset = () => {
       if (dc) dc.close();
@@ -81,47 +104,41 @@ export const voiceClientPage = `<!doctype html>
           try {
             const message = JSON.parse(event.data);
             if (message.type === 'input_audio_buffer.speech_started') show('Listening','I hear you.');
-            if (message.type === 'response.audio.delta') show('Speaking','Tap Interrupt or begin speaking.');
+            if (message.type === 'response.output_audio.delta') show('Speaking','Tap Interrupt or begin speaking.');
             if (message.type === 'response.done') show('Listening','Go ahead.');
+            if (message.type === 'conversation.item.input_audio_transcription.completed') {
+              queueTranscript('user_transcript', message.item_id || message.event_id, message.transcript);
+            }
+            if (message.type === 'response.output_audio_transcript.done') {
+              queueTranscript('assistant_transcript', message.item_id || message.response_id || message.event_id, message.transcript);
+            }
             if (message.type === 'response.output_item.done' && message.item?.type === 'function_call') {
-              if (message.item.name === 'search_project_knowledge') {
-                show('Searching project','Checking Google Drive, Gmail, and Outlook...');
-                let output;
-                try {
-                  const args = JSON.parse(message.item.arguments || '{}');
-                  const result = await api('/v1/knowledge/search', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query: args.query, maxResults: args.maxResults || 5 })
-                  });
-                  output = { ok: true, result: await result.json() };
-                } catch (error) {
-                  output = { ok: false, error: error instanceof Error ? error.message : 'Knowledge search failed' };
-                }
-                dc.send(JSON.stringify({ type: 'conversation.item.create', item: { type: 'function_call_output', call_id: message.item.call_id, output: JSON.stringify(output) } }));
-                dc.send(JSON.stringify({ type: 'response.create' }));
-              } else if (message.item.name === 'propose_artifact_create') {
-                show('Checking action','Applying Pendleton OS policy and verification controls...');
-                let output;
-                try {
-                  const args = JSON.parse(message.item.arguments || '{}');
-                  const result = await api('/v1/voice/artifacts', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      idempotencyKey: message.item.call_id,
-                      title: args.title,
-                      text: args.text,
-                      drivingMode: driving.checked
-                    })
-                  });
-                  output = { ok: true, result: await result.json() };
-                } catch (error) {
-                  output = { ok: false, error: error instanceof Error ? error.message : 'Action failed' };
-                }
-                dc.send(JSON.stringify({ type: 'conversation.item.create', item: { type: 'function_call_output', call_id: message.item.call_id, output: JSON.stringify(output) } }));
-                dc.send(JSON.stringify({ type: 'response.create' }));
+              const statusMessages = {
+                search_project_knowledge: ['Searching project','Checking Google Drive, Gmail, and Outlook...'],
+                propose_artifact_create: ['Checking action','Applying Pendleton OS policy and verification controls...'],
+                capture_follow_up: ['Capturing follow-up','Saving it through Pendleton OS controls...'],
+                select_project: ['Selecting project','Checking the governed project registry...']
+              };
+              const statusMessage = statusMessages[message.item.name] || ['Working','Applying Pendleton OS controls...'];
+              show(statusMessage[0], statusMessage[1]);
+              let output;
+              try {
+                const args = JSON.parse(message.item.arguments || '{}');
+                const result = await api('/v1/conversations/' + sessionId + '/tools', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    callId: message.item.call_id,
+                    name: message.item.name,
+                    arguments: args
+                  })
+                });
+                output = await result.json();
+              } catch (error) {
+                output = { ok: false, error: { code: error instanceof Error ? error.message : 'Tool execution failed' } };
               }
+              dc.send(JSON.stringify({ type: 'conversation.item.create', item: { type: 'function_call_output', call_id: message.item.call_id, output: JSON.stringify(output) } }));
+              dc.send(JSON.stringify({ type: 'response.create' }));
             }
           } catch {}
         };
@@ -145,7 +162,8 @@ export const voiceClientPage = `<!doctype html>
     stop.addEventListener('click', async () => {
       const closing = sessionId;
       reset();
-      if (closing) { try { await api('/v1/conversations/' + closing + '/close', { method: 'POST' }); } catch {} }
+      await transcriptQueue.catch(() => {});
+      if (closing) { try { await api('/v1/conversations/' + closing + '/close', { method: 'POST', keepalive: true }); } catch {} }
       sessionId = undefined;
       show('Ended','The conversation is closed and its durable record is retained.');
     });

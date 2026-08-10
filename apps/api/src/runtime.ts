@@ -165,6 +165,8 @@ export const buildProductionRuntime = async (): Promise<ProductionRuntime> => {
       : new RealtimeConversationService(conversations, new OpenAIRealtimeProvider(openAiApiKey), {
           model: process.env.OPENAI_REALTIME_MODEL ?? 'gpt-realtime-2.1',
           voice: process.env.OPENAI_REALTIME_VOICE ?? 'marin',
+          transcriptionModel:
+            process.env.OPENAI_REALTIME_TRANSCRIPTION_MODEL ?? 'gpt-live-transcribe',
         });
   const workflows = new PostgresWorkflowRepository(pool);
   const gateway = new UnifiedCommandGateway({

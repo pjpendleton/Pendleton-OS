@@ -20,6 +20,8 @@
 | Durable project registry          | System Design project context; API Contract v1             | PROJECT-001   |
 | Read-only email search            | System Design adapters; ADR-004; Policy Matrix v1          | EMAIL-001     |
 | Project knowledge retrieval       | System Design context boundary; ADR-003; ADR-004           | KNOWLEDGE-001 |
+| Durable conversation runtime      | ADR-003; ADR-004; Voice Operating Contract v1              | VOICE-001     |
+| Voice conversation reliability    | ADR-003; ADR-004; Conversation Runtime v1.3                | VOICE-002     |
 
 Every future material behavior, schema, workflow, provider mutation, or public interface must
 add or update its traceability entry in the same controlled change.
