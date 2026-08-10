@@ -37,7 +37,7 @@ export const voiceClientPage = `<!doctype html>
       <button id="interrupt" class="secondary" disabled>Interrupt</button>
       <button id="stop" class="danger" disabled>End</button>
     </div>
-    <p id="pairing" hidden>This device is not paired. <a href="/pair">Pair it from your desktop first.</a></p>
+    <p id="pairing" hidden>This device is locked. <a href="/pair">Enter your device passcode.</a></p>
     <audio id="speaker" autoplay></audio>
   </main>
   <script>
@@ -83,27 +83,45 @@ export const voiceClientPage = `<!doctype html>
             if (message.type === 'input_audio_buffer.speech_started') show('Listening','I hear you.');
             if (message.type === 'response.audio.delta') show('Speaking','Tap Interrupt or begin speaking.');
             if (message.type === 'response.done') show('Listening','Go ahead.');
-            if (message.type === 'response.output_item.done' && message.item?.type === 'function_call' && message.item.name === 'propose_artifact_create') {
-              show('Checking action','Applying Pendleton OS policy and verification controls...');
-              let output;
-              try {
-                const args = JSON.parse(message.item.arguments || '{}');
-                const result = await api('/v1/voice/artifacts', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    idempotencyKey: message.item.call_id,
-                    title: args.title,
-                    text: args.text,
-                    drivingMode: driving.checked
-                  })
-                });
-                output = { ok: true, result: await result.json() };
-              } catch (error) {
-                output = { ok: false, error: error instanceof Error ? error.message : 'Action failed' };
+            if (message.type === 'response.output_item.done' && message.item?.type === 'function_call') {
+              if (message.item.name === 'search_project_knowledge') {
+                show('Searching project','Checking Google Drive, Gmail, and Outlook...');
+                let output;
+                try {
+                  const args = JSON.parse(message.item.arguments || '{}');
+                  const result = await api('/v1/knowledge/search', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: args.query, maxResults: args.maxResults || 5 })
+                  });
+                  output = { ok: true, result: await result.json() };
+                } catch (error) {
+                  output = { ok: false, error: error instanceof Error ? error.message : 'Knowledge search failed' };
+                }
+                dc.send(JSON.stringify({ type: 'conversation.item.create', item: { type: 'function_call_output', call_id: message.item.call_id, output: JSON.stringify(output) } }));
+                dc.send(JSON.stringify({ type: 'response.create' }));
+              } else if (message.item.name === 'propose_artifact_create') {
+                show('Checking action','Applying Pendleton OS policy and verification controls...');
+                let output;
+                try {
+                  const args = JSON.parse(message.item.arguments || '{}');
+                  const result = await api('/v1/voice/artifacts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      idempotencyKey: message.item.call_id,
+                      title: args.title,
+                      text: args.text,
+                      drivingMode: driving.checked
+                    })
+                  });
+                  output = { ok: true, result: await result.json() };
+                } catch (error) {
+                  output = { ok: false, error: error instanceof Error ? error.message : 'Action failed' };
+                }
+                dc.send(JSON.stringify({ type: 'conversation.item.create', item: { type: 'function_call_output', call_id: message.item.call_id, output: JSON.stringify(output) } }));
+                dc.send(JSON.stringify({ type: 'response.create' }));
               }
-              dc.send(JSON.stringify({ type: 'conversation.item.create', item: { type: 'function_call_output', call_id: message.item.call_id, output: JSON.stringify(output) } }));
-              dc.send(JSON.stringify({ type: 'response.create' }));
             }
           } catch {}
         };
@@ -116,7 +134,7 @@ export const voiceClientPage = `<!doctype html>
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
         if (message.includes('401')) pairing.hidden = false;
-        show('Could not connect', message.includes('401') ? 'This device must be paired first.' : message);
+        show('Could not connect', message.includes('401') ? 'Unlock this device with your passcode first.' : message);
         reset();
       }
     });
@@ -134,7 +152,7 @@ export const voiceClientPage = `<!doctype html>
     fetch('/v1/auth/session').then(response => {
       if (!response.ok) {
         pairing.hidden = false;
-        show('Pairing required','Pair this device from the desktop before starting.');
+        show('Passcode required','Unlock this device before starting.');
       }
     }).catch(() => show('Offline','Check your network connection.'));
   </script>

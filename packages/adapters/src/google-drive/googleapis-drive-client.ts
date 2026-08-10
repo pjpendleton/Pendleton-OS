@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/await-thenable */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return */
 import { google, type Auth } from 'googleapis';
 import type { ArtifactObservationReader } from '@pendleton-os/application';
 import type { DriveDocument, GoogleDriveClient } from './google-drive-adapter.js';
@@ -25,6 +25,28 @@ const textContent = (document: { body?: { content?: readonly unknown[] } }): str
     })
     .join('')
     .replace(/\n$/, '');
+};
+
+const driveSearchTerms = (query: string): readonly string[] => {
+  const ignored = new Set([
+    'about',
+    'from',
+    'have',
+    'project',
+    'that',
+    'the',
+    'this',
+    'what',
+    'when',
+    'where',
+    'with',
+  ]);
+  const terms = query
+    .normalize('NFKD')
+    .split(/[^a-zA-Z0-9]+/)
+    .map((term) => term.toLowerCase())
+    .filter((term) => term.length >= 3 && !ignored.has(term));
+  return [...new Set(terms)].slice(0, 6);
 };
 
 export class GoogleApisDriveClient implements GoogleDriveClient, ArtifactObservationReader {
@@ -61,16 +83,60 @@ export class GoogleApisDriveClient implements GoogleDriveClient, ArtifactObserva
     return this.getDocument(fileId);
   }
 
-  async searchDocuments(parentFolderId: string, query: string): Promise<readonly DriveDocument[]> {
-    const escaped = query.replaceAll("'", "\\'");
-    const response = await this.#drive.files.list({
-      q: `'${parentFolderId}' in parents and name contains '${escaped}' and mimeType='application/vnd.google-apps.document' and trashed=false`,
-      fields: 'files(id)',
+  async searchDocuments(
+    parentFolderId: string,
+    query: string,
+    maxResults = 10,
+  ): Promise<readonly DriveDocument[]> {
+    const terms = driveSearchTerms(query);
+    if (terms.length === 0) return [];
+    const clauses = terms.flatMap((term) => {
+      const escaped = term.replaceAll("'", "\\'");
+      return [`name contains '${escaped}'`, `fullText contains '${escaped}'`];
     });
-    const documents = await Promise.all(
-      (response.data.files ?? []).map(({ id }) => (id ? this.getDocument(id) : undefined)),
-    );
-    return documents.filter((document): document is DriveDocument => document !== undefined);
+    const response = await this.#drive.files.list({
+      q: `(${clauses.join(' or ')}) and mimeType='application/vnd.google-apps.document' and trashed=false`,
+      fields: 'files(id,parents)',
+      pageSize: Math.min(Math.max(maxResults * 8, 20), 100),
+    });
+    const parentCache = new Map<string, readonly string[]>();
+    const ancestryFor = async (initialParents: readonly string[]): Promise<readonly string[]> => {
+      const ancestors = new Set(initialParents);
+      const queue = [...initialParents];
+      for (let inspected = 0; queue.length > 0 && inspected < 100; inspected += 1) {
+        const folderId = queue.shift();
+        if (folderId === undefined || folderId === parentFolderId) continue;
+        let parents = parentCache.get(folderId);
+        if (parents === undefined) {
+          try {
+            const folder = await this.#drive.files.get({
+              fileId: folderId,
+              fields: 'id,parents,trashed',
+            });
+            parents = folder.data.trashed ? [] : (folder.data.parents ?? []);
+          } catch {
+            parents = [];
+          }
+          parentCache.set(folderId, parents);
+        }
+        for (const parent of parents) {
+          if (ancestors.has(parent)) continue;
+          ancestors.add(parent);
+          queue.push(parent);
+        }
+      }
+      return [...ancestors];
+    };
+    const documents: DriveDocument[] = [];
+    for (const file of response.data.files ?? []) {
+      if (!file.id) continue;
+      const ancestorIds = await ancestryFor(file.parents ?? []);
+      if (!ancestorIds.includes(parentFolderId)) continue;
+      const document = await this.getDocument(file.id);
+      if (document !== undefined) documents.push({ ...document, ancestorIds });
+      if (documents.length === maxResults) break;
+    }
+    return documents;
   }
 
   async createDocument(input: {

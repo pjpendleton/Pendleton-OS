@@ -5,6 +5,7 @@ export interface DriveDocument {
   readonly name: string;
   readonly mimeType: 'application/vnd.google-apps.document';
   readonly parentIds: readonly string[];
+  readonly ancestorIds?: readonly string[];
   readonly revisionId: string;
   readonly text: string;
 }
@@ -15,13 +16,18 @@ export interface DriveEvidence {
   readonly fileId: string;
   readonly revisionId: string;
   readonly parentIds: readonly string[];
+  readonly ancestorIds?: readonly string[];
   readonly contentHash: string;
   readonly observedAt: string;
 }
 
 export interface GoogleDriveClient {
   getDocument(fileId: string): Promise<DriveDocument | undefined>;
-  searchDocuments(parentFolderId: string, query: string): Promise<readonly DriveDocument[]>;
+  searchDocuments(
+    parentFolderId: string,
+    query: string,
+    maxResults?: number,
+  ): Promise<readonly DriveDocument[]>;
   createDocument(input: {
     readonly parentFolderId: string;
     readonly name: string;
@@ -69,9 +75,10 @@ export class GoogleDriveAdapter {
   async search(
     projectId: string,
     query: string,
+    maxResults = 10,
   ): Promise<readonly { document: DriveDocument; evidence: DriveEvidence }[]> {
     const root = await this.#requireRoot(projectId);
-    const documents = await this.#client.searchDocuments(root, query);
+    const documents = await this.#client.searchDocuments(root, query, maxResults);
     return documents.map((document) => {
       this.#assertInProject(document, root);
       return { document, evidence: this.#evidence('search', document) };
@@ -114,7 +121,8 @@ export class GoogleDriveAdapter {
   }
 
   #assertInProject(document: DriveDocument, root: string): void {
-    if (!document.parentIds.includes(root)) throw new Error('DRIVE_PROJECT_BOUNDARY_VIOLATION');
+    if (!document.parentIds.includes(root) && !document.ancestorIds?.includes(root))
+      throw new Error('DRIVE_PROJECT_BOUNDARY_VIOLATION');
   }
 
   #evidence(operation: DriveEvidence['operation'], document: DriveDocument): DriveEvidence {
@@ -124,6 +132,7 @@ export class GoogleDriveAdapter {
       fileId: document.fileId,
       revisionId: document.revisionId,
       parentIds: document.parentIds,
+      ...(document.ancestorIds === undefined ? {} : { ancestorIds: document.ancestorIds }),
       contentHash: contentHash(document.text),
       observedAt: this.#now().toISOString(),
     };

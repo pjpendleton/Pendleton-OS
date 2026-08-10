@@ -9,7 +9,11 @@ const start = async (): Promise<void> => {
   }
 
   const runtime = await buildProductionRuntime();
-  const devicePairing = new DevicePairingService(apiToken);
+  const devicePairing = new DevicePairingService(apiToken, {
+    ...(process.env.PENDLETON_DEVICE_PIN === undefined
+      ? {}
+      : { passcode: process.env.PENDLETON_DEVICE_PIN }),
+  });
   const app = buildApi(runtime.gateway, {
     apiToken,
     devicePairing: {
@@ -39,6 +43,11 @@ const start = async (): Promise<void> => {
       service: runtime.email,
       actorId: process.env.PENDLETON_ACTOR_ID ?? '018f1f91-6f3d-7c16-bc61-55f9fa334f12',
       defaultProjectId: process.env.PENDLETON_EMAIL_PROJECT_ID ?? 'pendleton-os',
+    },
+    knowledge: {
+      service: runtime.knowledge,
+      actorId: process.env.PENDLETON_ACTOR_ID ?? '018f1f91-6f3d-7c16-bc61-55f9fa334f12',
+      defaultProjectId: process.env.PENDLETON_KNOWLEDGE_PROJECT_ID ?? 'pendleton-os',
     },
     ...(runtime.realtime === undefined
       ? {}

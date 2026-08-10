@@ -28,7 +28,7 @@ const authorizationUrl = oauth.generateAuthUrl({
   include_granted_scopes: true,
   prompt: 'consent',
   scope: [
-    'https://www.googleapis.com/auth/drive.file',
+    'https://www.googleapis.com/auth/drive.readonly',
     'https://www.googleapis.com/auth/gmail.readonly',
   ],
   state,

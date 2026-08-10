@@ -11,15 +11,18 @@ import {
   EventRecorder,
   InMemoryIdentityDirectory,
   PolicyEngine,
+  ProjectKnowledgeService,
   RealtimeConversationService,
   UnifiedCommandGateway,
   standardCommandCatalog,
+  type ProjectRegistry,
   type ReadOnlyEmailClient,
 } from '@pendleton-os/application';
 import {
   GoogleApisDriveClient,
   GoogleApisGmailClient,
   GoogleDriveAdapter,
+  GoogleDriveKnowledgeSource,
   MicrosoftDelegatedTokenProvider,
   MicrosoftGraphMailClient,
   OpenAIRealtimeProvider,
@@ -58,10 +61,28 @@ export interface ProductionRuntime {
   readonly conversations: ConversationRuntime;
   readonly projects: PostgresProjectRegistry;
   readonly email: EmailAccessService;
+  readonly knowledge: ProjectKnowledgeService;
   readonly realtime: RealtimeConversationService | undefined;
   readonly readiness: () => Promise<boolean>;
   readonly close: () => Promise<void>;
 }
+
+export const resolveProjectKnowledgeRoot = async (
+  projects: Pick<ProjectRegistry, 'findResource' | 'getResources'>,
+  projectId: string,
+): Promise<string | undefined> => {
+  const resources = await projects.getResources(projectId);
+  const knowledgeRoots = resources.filter(
+    (resource) =>
+      resource.provider === 'google-drive' &&
+      resource.resourceType === 'folder' &&
+      resource.status === 'active' &&
+      resource.metadata['purpose'] === 'project-knowledge',
+  );
+  if (knowledgeRoots.length > 1) throw new Error('PROJECT_KNOWLEDGE_ROOT_AMBIGUOUS');
+  if (knowledgeRoots[0] !== undefined) return knowledgeRoots[0].externalId;
+  return (await projects.findResource(projectId, 'google-drive', 'project-root'))?.externalId;
+};
 
 export const buildProductionRuntime = async (): Promise<ProductionRuntime> => {
   const databaseUrl = (await secretText('DATABASE_URL', 'database-url.txt')).trim();
@@ -116,6 +137,27 @@ export const buildProductionRuntime = async (): Promise<ProductionRuntime> => {
     randomUUID,
     () => new Date(),
   );
+  const drive = new GoogleDriveAdapter({
+    client: driveClient,
+    projects: {
+      getProjectRoot: async (projectId) =>
+        (await projects.findResource(projectId, 'google-drive', 'project-root'))?.externalId,
+    },
+  });
+  const knowledgeDrive = new GoogleDriveAdapter({
+    client: driveClient,
+    projects: {
+      getProjectRoot: async (projectId) => resolveProjectKnowledgeRoot(projects, projectId),
+    },
+  });
+  const knowledge = new ProjectKnowledgeService({
+    projects,
+    documents: new GoogleDriveKnowledgeSource(knowledgeDrive),
+    email,
+    events: eventRecorder,
+    createId: randomUUID,
+    hashQuery: (value) => createHash('sha256').update(value).digest('hex'),
+  });
   const openAiApiKey = process.env.OPENAI_API_KEY;
   const realtime =
     openAiApiKey === undefined
@@ -138,13 +180,7 @@ export const buildProductionRuntime = async (): Promise<ProductionRuntime> => {
     }),
     policy: new PolicyEngine(),
     workflows: new VerifiedDriveWorkflowDispatcher({
-      drive: new GoogleDriveAdapter({
-        client: driveClient,
-        projects: {
-          getProjectRoot: async (projectId) =>
-            (await projects.findResource(projectId, 'google-drive', 'project-root'))?.externalId,
-        },
-      }),
+      drive,
       verifier: new ArtifactVerifier({
         reader: driveClient,
         now: () => new Date(),
@@ -176,6 +212,7 @@ export const buildProductionRuntime = async (): Promise<ProductionRuntime> => {
     conversations,
     projects,
     email,
+    knowledge,
     realtime,
     readiness,
     close: async () => {
