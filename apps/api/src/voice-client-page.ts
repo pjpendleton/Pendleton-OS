@@ -37,7 +37,7 @@ export const voiceClientPage = `<!doctype html>
       <button id="interrupt" class="secondary" disabled>Interrupt</button>
       <button id="stop" class="danger" disabled>End</button>
     </div>
-    <p id="pairing" hidden>This device is not paired. <a href="/pair">Pair it from your desktop first.</a></p>
+    <p id="pairing" hidden>This device is locked. <a href="/pair">Enter your device passcode.</a></p>
     <audio id="speaker" autoplay></audio>
   </main>
   <script>
@@ -134,7 +134,7 @@ export const voiceClientPage = `<!doctype html>
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
         if (message.includes('401')) pairing.hidden = false;
-        show('Could not connect', message.includes('401') ? 'This device must be paired first.' : message);
+        show('Could not connect', message.includes('401') ? 'Unlock this device with your passcode first.' : message);
         reset();
       }
     });
@@ -152,7 +152,7 @@ export const voiceClientPage = `<!doctype html>
     fetch('/v1/auth/session').then(response => {
       if (!response.ok) {
         pairing.hidden = false;
-        show('Pairing required','Pair this device from the desktop before starting.');
+        show('Passcode required','Unlock this device before starting.');
       }
     }).catch(() => show('Offline','Check your network connection.'));
   </script>

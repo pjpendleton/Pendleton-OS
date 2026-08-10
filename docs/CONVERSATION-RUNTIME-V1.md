@@ -44,7 +44,7 @@ server-bound active project across governed Google Drive, Gmail, and Outlook sou
 receives only bounded result metadata and excerpts, while the aggregate query and successful
 provider reads are recorded in the kernel audit trail without storing query text or source content.
 
-The mobile page starts and closes durable voice sessions, requests microphone access, plays realtime assistant audio, reports connection state, and provides a large explicit interruption control. The permanent access token is never entered or retained on the phone. A one-time desktop pairing ceremony grants a signed 30-day secure device cookie. When the model proposes an internal artifact, the client submits it through the existing authenticated voice gateway and returns the real policy/workflow result to the model before conversation continues.
+The mobile page starts and closes durable voice sessions, requests microphone access, plays realtime assistant audio, reports connection state, and provides a large explicit interruption control. The permanent access token is never entered or retained on the phone. A server-validated, rate-limited device PIN grants a signed 30-day secure device cookie; the one-time desktop QR ceremony remains available as recovery. The PIN is held only in the production secret store and grants paired-device authority rather than administrator authority. When the model proposes an internal artifact, the client submits it through the existing authenticated voice gateway and returns the real policy/workflow result to the model before conversation continues.
 
 This slice does not yet provide server-side sideband tool execution, automatic transcript event
 ingestion, or long-session summarization. Those capabilities attach to this runtime without

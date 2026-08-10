@@ -1,3 +1,68 @@
+export const pairingPasscodePage = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#111827">
+  <title>Unlock Pendleton OS</title>
+  <style>
+    :root { color-scheme: dark; font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: #0b1120; color: #f8fafc; display: grid; place-items: center; padding: 24px 20px; }
+    main { width: min(100%,480px); display: grid; gap: 18px; }
+    h1 { margin: 0; font-size: clamp(2rem,10vw,3.2rem); letter-spacing: -.04em; }
+    p { color: #cbd5e1; line-height: 1.5; margin: 0; }
+    form { padding: 20px; border: 1px solid #334155; border-radius: 20px; background: #111827; display: grid; gap: 16px; }
+    label { display: grid; gap: 8px; color: #cbd5e1; }
+    input { width: 100%; padding: 18px; border-radius: 14px; border: 1px solid #334155; background: #0b1120; color: white; font-size: 1.5rem; text-align: center; letter-spacing: .35em; }
+    button { min-height: 64px; border: 0; border-radius: 18px; font-size: 1.1rem; font-weight: 700; color: white; background: #2563eb; }
+    button:disabled { opacity: .45; }
+    #status { min-height: 24px; color: #fca5a5; }
+    a { color: #93c5fd; }
+  </style>
+</head>
+<body>
+  <main>
+    <div><h1>Unlock Pendleton OS</h1><p>Enter your device passcode. A successful unlock keeps this browser paired for 30 days.</p></div>
+    <form id="form">
+      <label>Device passcode<input id="passcode" type="password" inputmode="numeric" pattern="[0-9]*" minlength="4" maxlength="12" autocomplete="one-time-code" autofocus></label>
+      <button id="unlock" type="submit">Unlock voice</button>
+      <p id="status" role="alert" aria-live="polite"></p>
+    </form>
+    <p>Desktop recovery is still available through the <a href="/pair/admin">secure QR pairing page</a>.</p>
+  </main>
+  <script>
+    const form = document.querySelector('#form');
+    const passcode = document.querySelector('#passcode');
+    const unlock = document.querySelector('#unlock');
+    const status = document.querySelector('#status');
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      if (!/^\\d{4,12}$/.test(passcode.value)) { status.textContent = 'Enter the numeric device passcode.'; return; }
+      unlock.disabled = true;
+      status.textContent = '';
+      try {
+        const response = await fetch('/v1/device-pairings/passcode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ passcode: passcode.value }) });
+        passcode.value = '';
+        if (!response.ok) {
+          const code = (await response.json()).errors?.[0]?.code;
+          if (response.status === 429) throw new Error('Too many attempts. Wait 15 minutes before trying again.');
+          if (code === 'DEVICE_PIN_NOT_CONFIGURED') throw new Error('Passcode unlock is not configured. Use desktop recovery.');
+          throw new Error('Passcode not accepted.');
+        }
+        status.style.color = '#86efac';
+        status.textContent = 'Device unlocked. Opening voice…';
+        setTimeout(() => location.replace('/voice'), 350);
+      } catch (error) {
+        status.textContent = error.message;
+        unlock.disabled = false;
+        passcode.focus();
+      }
+    });
+  </script>
+</body>
+</html>`;
+
 export const pairingAdminPage = `<!doctype html>
 <html lang="en">
 <head>
@@ -25,7 +90,7 @@ export const pairingAdminPage = `<!doctype html>
 </head>
 <body>
   <main>
-    <div><h1>Pair your iPhone</h1><p>Authorize once on this desktop. The QR code expires in five minutes and can be used only once.</p></div>
+    <div><h1>Desktop recovery</h1><p>Create a one-time QR code when passcode pairing is unavailable. The code expires in five minutes and can be used only once.</p></div>
     <section class="card" id="authorize">
       <label>Administrator access token<input id="token" type="password" autocomplete="off" placeholder="Pendleton OS API token"></label>
       <button id="create">Create secure pairing code</button>

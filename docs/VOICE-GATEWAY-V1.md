@@ -45,7 +45,17 @@ OpenAI API key, or another provider secret.
 
 ## Mobile device pairing
 
-`GET /pair` serves the desktop authorization page. An administrator creates a five-minute,
+The default mobile unlock flow is `GET /pair`. The user enters a numeric device PIN that is stored
+only in the production secret store. `POST /v1/device-pairings/passcode` validates the PIN on the
+server and issues the same signed 30-day device cookie used by QR pairing. The PIN never appears in
+the HTML, JavaScript bundle, repository, URL, browser storage, or cookie. Five failed attempts from
+the same server-observed client address trigger a 15-minute lockout. The PIN grants paired-device
+authority only; it cannot create pairings, import projects, alter project state, or act as the
+administrator bearer credential.
+
+The QR ceremony remains available as desktop recovery at `GET /pair/admin`.
+
+An administrator creates a five-minute,
 single-use pairing link through `POST /v1/device-pairings`. The server stores only a hash of the
 pending pairing secret. The QR code encodes the secret in the URL fragment, so it is not sent in
 the initial HTTP request or included in ordinary access logs.

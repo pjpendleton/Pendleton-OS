@@ -549,6 +549,69 @@ describe('mobile voice client', () => {
 });
 
 describe('mobile device pairing', () => {
+  it('serves passcode unlock without embedding the configured passcode', async () => {
+    const app = buildApi(
+      { execute: () => Promise.resolve({ disposition: 'accepted' }) },
+      {
+        apiToken: 'a'.repeat(32),
+        devicePairing: {
+          service: new DevicePairingService('a'.repeat(32), { passcode: '2468' }),
+          publicOrigin: 'https://os.peterpendleton.com',
+        },
+      },
+    );
+
+    const page = await app.inject({ method: 'GET', url: '/pair' });
+    expect(page.statusCode).toBe(200);
+    expect(page.body).toContain('Unlock Pendleton OS');
+    expect(page.body).not.toContain('2468');
+
+    const claimed = await app.inject({
+      method: 'POST',
+      url: '/v1/device-pairings/passcode',
+      payload: { passcode: '2468' },
+    });
+    expect(claimed.statusCode).toBe(201);
+    const cookie = String(claimed.headers['set-cookie']).split(';')[0];
+    expect(
+      (await app.inject({ method: 'GET', url: '/v1/auth/session', headers: { cookie } }))
+        .statusCode,
+    ).toBe(200);
+    await app.close();
+  });
+
+  it('rate limits invalid passcode attempts', async () => {
+    const service = new DevicePairingService('a'.repeat(32), {
+      passcode: '2468',
+      pinMaxAttempts: 2,
+    });
+    const app = buildApi(
+      { execute: () => Promise.resolve({ disposition: 'accepted' }) },
+      {
+        apiToken: 'a'.repeat(32),
+        devicePairing: { service, publicOrigin: 'https://os.peterpendleton.com' },
+      },
+    );
+
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/v1/device-pairings/passcode',
+          payload: { passcode: '1111' },
+        })
+      ).statusCode,
+    ).toBe(401);
+    const limited = await app.inject({
+      method: 'POST',
+      url: '/v1/device-pairings/passcode',
+      payload: { passcode: '2222' },
+    });
+    expect(limited.statusCode).toBe(429);
+    expect(limited.headers['retry-after']).toBe('900');
+    await app.close();
+  });
+
   it('creates a one-time QR pairing and authorizes the claimed device cookie', async () => {
     const service = new DevicePairingService('a'.repeat(32));
     const app = buildApi(

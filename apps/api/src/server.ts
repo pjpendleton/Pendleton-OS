@@ -9,7 +9,11 @@ const start = async (): Promise<void> => {
   }
 
   const runtime = await buildProductionRuntime();
-  const devicePairing = new DevicePairingService(apiToken);
+  const devicePairing = new DevicePairingService(apiToken, {
+    ...(process.env.PENDLETON_DEVICE_PIN === undefined
+      ? {}
+      : { passcode: process.env.PENDLETON_DEVICE_PIN }),
+  });
   const app = buildApi(runtime.gateway, {
     apiToken,
     devicePairing: {

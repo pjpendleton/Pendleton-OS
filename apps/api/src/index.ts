@@ -18,7 +18,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { randomUUID } from 'node:crypto';
 import QRCode from 'qrcode';
 import { type DevicePairingService } from './device-pairing.js';
-import { pairingAdminPage, pairingClaimPage } from './pairing-client-pages.js';
+import { pairingAdminPage, pairingClaimPage, pairingPasscodePage } from './pairing-client-pages.js';
 import { voiceClientPage } from './voice-client-page.js';
 
 const projectStatuses = new Set<ProjectStatus>(['candidate', 'active', 'archived']);
@@ -179,6 +179,9 @@ export const buildApi = (
   app.get('/health/live', () => ({ status: 'alive' }));
   app.get('/voice', (_request, reply) => reply.type('text/html').send(voiceClientPage));
   app.get('/pair', (_request, reply) =>
+    reply.header('cache-control', 'no-store').type('text/html').send(pairingPasscodePage),
+  );
+  app.get('/pair/admin', (_request, reply) =>
     reply.header('cache-control', 'no-store').type('text/html').send(pairingAdminPage),
   );
   app.get('/pair/claim', (_request, reply) =>
@@ -265,6 +268,36 @@ export const buildApi = (
     } catch (error) {
       const code = error instanceof Error ? error.message : 'DEVICE_PAIRING_INVALID';
       return reply.code(code === 'DEVICE_PAIRING_EXPIRED' ? 410 : 400).send({ errors: [{ code }] });
+    }
+  });
+  app.post('/v1/device-pairings/passcode', async (request, reply) => {
+    if (options.devicePairing === undefined) {
+      return reply.code(503).send({ errors: [{ code: 'DEVICE_PAIRING_NOT_CONFIGURED' }] });
+    }
+    const body = request.body as { passcode?: unknown } | undefined;
+    if (typeof body?.passcode !== 'string' || !/^\d{4,12}$/.test(body.passcode)) {
+      return reply.code(400).send({ errors: [{ code: 'DEVICE_PIN_INVALID' }] });
+    }
+    try {
+      const session = options.devicePairing.service.claimPasscode(body.passcode, request.ip);
+      request.log.info({ expiresAt: session.expiresAt }, 'device_passcode_claimed');
+      return await reply
+        .header('cache-control', 'no-store')
+        .header('set-cookie', options.devicePairing.service.sessionCookie(session.cookieValue))
+        .code(201)
+        .send({ paired: true, expiresAt: session.expiresAt });
+    } catch (error) {
+      const code = error instanceof Error ? error.message : 'DEVICE_PIN_INVALID';
+      if (code === 'DEVICE_PIN_NOT_CONFIGURED') {
+        return reply.code(503).send({ errors: [{ code }] });
+      }
+      if (code === 'DEVICE_PIN_RATE_LIMITED') {
+        return reply
+          .header('retry-after', '900')
+          .code(429)
+          .send({ errors: [{ code }] });
+      }
+      return reply.code(401).send({ errors: [{ code: 'DEVICE_PIN_INVALID' }] });
     }
   });
   app.get('/v1/projects', async (request, reply) => {
