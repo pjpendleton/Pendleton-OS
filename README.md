@@ -60,6 +60,11 @@ active authorized project, return bounded message metadata and previews, and app
 containing a query hash instead of mailbox content. Account authorization remains an explicit OAuth
 step. See `docs/EMAIL-CONNECTORS-V1.md`.
 
+KNOWLEDGE-001 adds project-scoped retrieval across nested Google Drive documents and both connected
+mailboxes. Results remain in their source systems, queries are bounded and audit-hashed, partial
+provider failures are disclosed, and the realtime voice model receives a governed
+`search_project_knowledge` tool. See `docs/PROJECT-KNOWLEDGE-V1.md`.
+
 ## Prerequisites
 
 - Node.js 24 LTS

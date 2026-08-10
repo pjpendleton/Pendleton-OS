@@ -2,7 +2,7 @@
 
 Status: Production deployed with realtime voice and secure mobile device pairing
 
-Version: 1.1.1
+Version: 1.2.0
 
 Date: 2026-08-08
 
@@ -39,6 +39,13 @@ The migrations explicitly revoke access from Supabase `anon` and `authenticated`
 
 The Realtime integration uses `gpt-realtime-2.1` with the `marin` voice by default. The standard OpenAI API key stays on the Pendleton OS server. The mobile client receives only the SDP answer needed to establish its WebRTC media connection. The model receives recent durable transcript context and may call `propose_artifact_create`; the tool is explicitly a proposal and cannot bypass Pendleton OS policy, confirmation, verification, or audit controls.
 
+The model may also call `search_project_knowledge`. That read-only tool searches the session's
+server-bound active project across governed Google Drive, Gmail, and Outlook sources. The phone
+receives only bounded result metadata and excerpts, while the aggregate query and successful
+provider reads are recorded in the kernel audit trail without storing query text or source content.
+
 The mobile page starts and closes durable voice sessions, requests microphone access, plays realtime assistant audio, reports connection state, and provides a large explicit interruption control. The permanent access token is never entered or retained on the phone. A one-time desktop pairing ceremony grants a signed 30-day secure device cookie. When the model proposes an internal artifact, the client submits it through the existing authenticated voice gateway and returns the real policy/workflow result to the model before conversation continues.
 
-This slice does not yet provide server-side sideband tool execution, automatic transcript event ingestion, long-session summarization, or project knowledge retrieval. Those capabilities attach to this runtime without changing its authority boundaries.
+This slice does not yet provide server-side sideband tool execution, automatic transcript event
+ingestion, or long-session summarization. Those capabilities attach to this runtime without
+changing its authority boundaries.

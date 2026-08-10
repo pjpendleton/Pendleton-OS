@@ -106,3 +106,12 @@ export {
   type EmailSearchRequest,
   type ReadOnlyEmailClient,
 } from './email/email-access-service.js';
+export {
+  ProjectKnowledgeService,
+  type ProjectDocumentKnowledgeSource,
+  type ProjectKnowledgeItem,
+  type ProjectKnowledgeProvider,
+  type ProjectKnowledgeSearchRequest,
+  type ProjectKnowledgeSearchResult,
+  type ProjectKnowledgeSourceStatus,
+} from './knowledge/project-knowledge-service.js';

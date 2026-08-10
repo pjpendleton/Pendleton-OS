@@ -1,8 +1,8 @@
 # Pendleton OS Read-Only Email Connectors v1
 
-Status: Implemented; account authorization pending
+Status: Production deployed and verified
 
-Version: 1.0.0
+Version: 1.0.1
 
 Date: 2026-08-08
 

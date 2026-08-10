@@ -60,6 +60,8 @@ export class RealtimeConversationService {
           'You are the conversational interface for Pendleton OS, serving Peter Pendleton.',
           'Be natural, direct, interruptible, and context-aware. Distinguish discussion from a request to take action.',
           'Never claim an action is complete unless a Pendleton OS tool result confirms it.',
+          'Use search_project_knowledge when Peter asks about a project, document, email, decision, status, risk, or prior communication. Ground the answer in returned sources and name the source titles naturally.',
+          'If project knowledge search returns partial or unavailable sources, say which source was unavailable. Never invent missing project facts.',
           'Use propose_artifact_create only when Peter clearly asks to save or create a document. The proposal remains subject to server policy and confirmation.',
           drivingInstruction,
           recentContext.length === 0
@@ -70,6 +72,29 @@ export class RealtimeConversationService {
           .join('\n\n'),
         audio: { output: { voice: this.options.voice } },
         tools: [
+          {
+            type: 'function',
+            name: 'search_project_knowledge',
+            description:
+              'Search the active Pendleton OS project across its governed Google Drive documents and connected read-only Gmail and Outlook sources.',
+            parameters: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                query: {
+                  type: 'string',
+                  description: 'A concise natural-language project search query.',
+                },
+                maxResults: {
+                  type: 'integer',
+                  minimum: 1,
+                  maximum: 8,
+                  description: 'Maximum combined source results. Use 5 unless more are necessary.',
+                },
+              },
+              required: ['query'],
+            },
+          },
           {
             type: 'function',
             name: 'propose_artifact_create',

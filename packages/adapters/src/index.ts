@@ -10,6 +10,7 @@ export {
   GoogleApisDriveClient,
   createGoogleOAuthClient,
 } from './google-drive/googleapis-drive-client.js';
+export { GoogleDriveKnowledgeSource } from './google-drive/google-drive-knowledge-source.js';
 export { OpenAIRealtimeProvider } from './openai-realtime/openai-realtime-provider.js';
 export { GoogleApisGmailClient } from './email/googleapis-gmail-client.js';
 export {

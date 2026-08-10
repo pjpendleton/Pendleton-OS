@@ -6,11 +6,15 @@ class FakeClient implements GoogleDriveClient {
   getDocument(fileId: string) {
     return Promise.resolve(this.documents.get(fileId));
   }
-  searchDocuments(parentFolderId: string, query: string) {
+  searchDocuments(parentFolderId: string, query: string, maxResults = 10) {
     return Promise.resolve(
-      [...this.documents.values()].filter(
-        (doc) => doc.parentIds.includes(parentFolderId) && doc.name.includes(query),
-      ),
+      [...this.documents.values()]
+        .filter(
+          (doc) =>
+            (doc.parentIds.includes(parentFolderId) || doc.ancestorIds?.includes(parentFolderId)) &&
+            doc.name.includes(query),
+        )
+        .slice(0, maxResults),
     );
   }
   createDocument(input: { parentFolderId: string; name: string; text: string }) {
@@ -106,5 +110,18 @@ describe('GoogleDriveAdapter', () => {
     const results = await adapter.search('pendleton-os', 'Brief');
     expect(results).toHaveLength(1);
     expect(results[0]?.evidence.operation).toBe('search');
+  });
+  it('accepts a nested document only when verified ancestry reaches the project root', async () => {
+    const { adapter, client } = createAdapter();
+    client.documents.set('nested', {
+      fileId: 'nested',
+      name: 'Nested Brief',
+      mimeType: 'application/vnd.google-apps.document',
+      parentIds: ['child-folder'],
+      ancestorIds: ['child-folder', 'folder-root'],
+      revisionId: 'rev-1',
+      text: 'Nested project context',
+    });
+    await expect(adapter.search('pendleton-os', 'Brief')).resolves.toHaveLength(1);
   });
 });

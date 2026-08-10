@@ -1,6 +1,6 @@
 # Pendleton OS Voice Gateway v1
 
-Version: 1.1.0
+Version: 1.2.0
 Status: Production deployed
 
 ## Purpose
@@ -15,6 +15,10 @@ invoke provider adapters directly. Every accepted voice action follows the canon
 The first supported action captures an internal artifact. The caller supplies a stable
 idempotency key for the utterance, allowing retries without duplicating work. The request records
 whether the user is driving so the Policy Matrix can apply driving-specific handling.
+
+The gateway also supports read-only `knowledge.search` through the realtime conversation tool. The
+server binds the active project and actor, searches governed Drive and mailbox sources, and returns
+bounded evidence to the model for a source-grounded spoken answer.
 
 ### Discover capabilities
 

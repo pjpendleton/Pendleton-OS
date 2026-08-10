@@ -5,6 +5,7 @@ import {
   ConversationRuntime,
   type EmailAccessService,
   type ConversationRepository,
+  type ProjectKnowledgeService,
   type ProjectRecord,
   type ProjectRegistry,
 } from '@pendleton-os/application';
@@ -269,6 +270,74 @@ describe('read-only email API', () => {
   });
 });
 
+describe('project knowledge API', () => {
+  it('performs an authenticated bounded search against the server-selected project', async () => {
+    const search = vi.fn().mockResolvedValue({
+      projectId: 'pendleton-os',
+      permissionMode: 'read-only',
+      items: [
+        {
+          provider: 'google-drive',
+          kind: 'document',
+          sourceId: 'doc-1',
+          title: 'System Design',
+          excerpt: 'Architecture',
+          sourceLabel: 'Google Drive',
+        },
+      ],
+      sources: [{ provider: 'google-drive', state: 'ready', resultCount: 1 }],
+    });
+    const app = buildApi(
+      { execute: () => Promise.resolve({ disposition: 'accepted' }) },
+      {
+        apiToken: 'a'.repeat(32),
+        knowledge: {
+          service: { search } as unknown as ProjectKnowledgeService,
+          actorId: '00000000-0000-4000-8000-000000000001',
+          defaultProjectId: 'pendleton-os',
+        },
+      },
+    );
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/knowledge/search',
+      headers: { authorization: `Bearer ${'a'.repeat(32)}` },
+      payload: { query: 'system architecture', maxResults: 5 },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      projectId: 'pendleton-os',
+      permissionMode: 'read-only',
+      items: [{ title: 'System Design' }],
+    });
+    expect(search).toHaveBeenCalledWith({
+      actorId: '00000000-0000-4000-8000-000000000001',
+      projectId: 'pendleton-os',
+      query: 'system architecture',
+      maxResults: 5,
+    });
+    await app.close();
+  });
+
+  it('requires authentication before searching project knowledge', async () => {
+    const app = buildApi(
+      { execute: () => Promise.resolve({ disposition: 'accepted' }) },
+      {
+        apiToken: 'a'.repeat(32),
+        knowledge: {
+          service: { search: vi.fn() } as unknown as ProjectKnowledgeService,
+          actorId: '00000000-0000-4000-8000-000000000001',
+          defaultProjectId: 'pendleton-os',
+        },
+      },
+    );
+    expect(
+      (await app.inject({ method: 'POST', url: '/v1/knowledge/search', payload: {} })).statusCode,
+    ).toBe(401);
+    await app.close();
+  });
+});
+
 describe('POST /v1/commands', () => {
   it('routes command requests only through the unified gateway', async () => {
     const execute = vi.fn().mockResolvedValue({
@@ -380,7 +449,7 @@ describe('voice gateway', () => {
       channel: 'voice',
       drivingModeSupported: true,
       interruptionSupported: true,
-      actions: ['artifact.create'],
+      actions: ['artifact.create', 'knowledge.search'],
       consequentialActionsRequireConfirmation: true,
     });
     await app.close();

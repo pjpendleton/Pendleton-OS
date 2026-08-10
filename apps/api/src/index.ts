@@ -7,6 +7,7 @@ import type {
   ConversationRuntime,
   EmailAccessService,
   ProjectCandidateInput,
+  ProjectKnowledgeService,
   ProjectRegistry,
   ProjectResourceProvider,
   ProjectResourceType,
@@ -157,6 +158,11 @@ export const buildApi = (
     };
     email?: {
       service: EmailAccessService;
+      actorId: string;
+      defaultProjectId: string;
+    };
+    knowledge?: {
+      service: ProjectKnowledgeService;
       actorId: string;
       defaultProjectId: string;
     };
@@ -381,6 +387,43 @@ export const buildApi = (
       return reply.code(status).send({ errors: [{ code }] });
     }
   });
+  app.post('/v1/knowledge/search', async (request, reply) => {
+    if (!authorized(request.headers)) {
+      return reply.code(401).send({ errors: [{ code: 'AUTHENTICATION_REQUIRED' }] });
+    }
+    if (options.knowledge === undefined) {
+      return reply.code(503).send({ errors: [{ code: 'KNOWLEDGE_NOT_CONFIGURED' }] });
+    }
+    const body = request.body as Record<string, unknown> | undefined;
+    const query = typeof body?.query === 'string' ? body.query : '';
+    const projectId =
+      typeof body?.projectId === 'string'
+        ? body.projectId.trim()
+        : options.knowledge.defaultProjectId;
+    const maxResults = body?.maxResults;
+    if (maxResults !== undefined && typeof maxResults !== 'number') {
+      return reply.code(400).send({ errors: [{ code: 'KNOWLEDGE_RESULT_LIMIT_INVALID' }] });
+    }
+    try {
+      return await options.knowledge.service.search({
+        actorId: options.knowledge.actorId,
+        projectId,
+        query,
+        ...(maxResults === undefined ? {} : { maxResults }),
+      });
+    } catch (error) {
+      const code = error instanceof Error ? error.message : 'KNOWLEDGE_INTERNAL_ERROR';
+      const status =
+        code === 'PROJECT_NOT_FOUND'
+          ? 404
+          : code === 'PROJECT_NOT_ACTIVE' || code === 'PROJECT_ACCESS_DENIED'
+            ? 403
+            : code.includes('INVALID')
+              ? 400
+              : 502;
+      return reply.code(status).send({ errors: [{ code }] });
+    }
+  });
   app.post('/v1/commands', async (request, reply) => {
     if (!authorized(request.headers)) {
       return reply
@@ -454,7 +497,7 @@ export const buildApi = (
       channel: 'voice',
       drivingModeSupported: true,
       interruptionSupported: true,
-      actions: ['artifact.create'],
+      actions: ['artifact.create', 'knowledge.search'],
       consequentialActionsRequireConfirmation: true,
     };
   });

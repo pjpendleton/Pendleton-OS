@@ -43,8 +43,12 @@ describe('RealtimeConversationService', () => {
     expect(captured?.safetyIdentifier).toMatch(/^[a-f0-9]{64}$/);
     expect(captured?.session.model).toBe('gpt-realtime-2.1');
     expect(captured?.session.audio).toEqual({ output: { voice: 'marin' } });
-    expect(captured?.session.tools[0]?.name).toBe('propose_artifact_create');
+    expect(captured?.session.tools.map(({ name }) => name)).toEqual([
+      'search_project_knowledge',
+      'propose_artifact_create',
+    ]);
     expect(captured?.session.instructions).toContain('Driving mode is active');
+    expect(captured?.session.instructions).toContain('Use search_project_knowledge');
     expect(captured?.session.instructions).toContain('user: Review the title report.');
   });
 });
