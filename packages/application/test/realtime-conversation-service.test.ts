@@ -56,10 +56,12 @@ describe('RealtimeConversationService', () => {
       'search_project_knowledge',
       'propose_artifact_create',
       'capture_follow_up',
+      'list_projects',
       'select_project',
     ]);
     expect(captured?.session.instructions).toContain('Driving mode is active');
     expect(captured?.session.instructions).toContain('Use search_project_knowledge');
+    expect(captured?.session.instructions).toContain('Use list_projects');
     expect(captured?.session.instructions).toContain('user: Review the title report.');
     expect(captured?.session.instructions).toContain('permit follow-up remains open');
   });
