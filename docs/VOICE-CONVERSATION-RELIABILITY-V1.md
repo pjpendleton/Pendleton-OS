@@ -26,7 +26,7 @@ Make Pendleton OS voice sessions durable, recoverable, project-aware, and safe e
 1. `search_project_knowledge` — read-only governed retrieval.
 2. `propose_artifact_create` — verified internal document proposal.
 3. `capture_follow_up` — verified internal follow-up capture.
-4. `list_projects` — bounded active-project discovery filtered by owner authorization.
+4. `list_projects` — bounded registered-project discovery, with lifecycle status, filtered by owner authorization.
 5. `select_project` — governed session-scope change through project aliases.
 
 Unknown tools, malformed arguments, cross-principal sessions, inactive projects, ambiguous aliases, and unconfigured services fail closed. Every completed or rejected allowed tool call is returned to the model and recorded as a durable tool result when the session remains writable.

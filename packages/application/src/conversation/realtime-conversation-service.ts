@@ -76,7 +76,7 @@ export class RealtimeConversationService {
           'If project knowledge search returns partial or unavailable sources, say which source was unavailable. Never invent missing project facts.',
           'Use propose_artifact_create only when Peter clearly asks to save or create a document. The proposal remains subject to server policy and confirmation.',
           'Use capture_follow_up when Peter asks you to remember, track, or follow up on an action. Repeat the captured action and any stated timing after the tool confirms it.',
-          'Use list_projects when Peter asks what projects are available, registered, active, or accessible. Read the returned display names naturally and identify the current project.',
+          'Use list_projects when Peter asks what projects are available, registered, active, candidate, archived, or accessible. Read the returned display names and statuses naturally, identify the current project, and explain that only active projects can be selected for work.',
           'Use select_project when Peter naturally names a different project. Do not switch projects unless the server confirms one unambiguous active match.',
           drivingInstruction,
           projectMemory.length === 0
@@ -157,7 +157,7 @@ export class RealtimeConversationService {
             type: 'function',
             name: 'list_projects',
             description:
-              'List the active projects Peter is authorized to access and identify the current conversation project.',
+              'List every registered project Peter is authorized to see, including lifecycle status, and identify the current conversation project. Candidate and archived projects remain unavailable for selection.',
             parameters: {
               type: 'object',
               additionalProperties: false,

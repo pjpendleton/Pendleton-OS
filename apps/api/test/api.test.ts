@@ -843,9 +843,25 @@ describe('conversation runtime API', () => {
     await app.close();
   });
 
-  it('lists only active projects authorized to the owner through the voice broker', async () => {
+  it('lists registered projects authorized to the owner with lifecycle status', async () => {
     const runtime = conversationRuntime();
     const registry = projectRegistry();
+    const current = (await registry.findById('pendleton-os')) as ProjectRecord;
+    vi.spyOn(registry, 'list').mockResolvedValue([
+      current,
+      {
+        ...current,
+        projectId: 'parkco-purchase',
+        displayName: 'Parkco Purchase',
+        status: 'candidate',
+      },
+      {
+        ...current,
+        projectId: 'unauthorized-project',
+        displayName: 'Unauthorized Project',
+        authorizedActorIds: ['someone-else'],
+      },
+    ]);
     const app = buildApi(
       { execute: () => Promise.resolve({ disposition: 'accepted' }) },
       {
@@ -878,7 +894,14 @@ describe('conversation runtime API', () => {
           {
             projectId: 'pendleton-os',
             displayName: 'Pendleton OS',
+            status: 'active',
             current: true,
+          },
+          {
+            projectId: 'parkco-purchase',
+            displayName: 'Parkco Purchase',
+            status: 'candidate',
+            current: false,
           },
         ],
       },

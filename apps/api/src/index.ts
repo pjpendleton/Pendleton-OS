@@ -768,7 +768,7 @@ export const buildApi = (
       } else if (name === 'list_projects') {
         if (options.projectRegistry === undefined)
           throw new Error('PROJECT_REGISTRY_NOT_CONFIGURED');
-        const projects = (await options.projectRegistry.registry.list('active'))
+        const projects = (await options.projectRegistry.registry.list())
           .filter((project) =>
             project.authorizedActorIds.includes(options.projectRegistry?.ownerActorId ?? ''),
           )
@@ -778,6 +778,7 @@ export const buildApi = (
             displayName: project.displayName ?? project.projectId,
             description: project.description ?? '',
             aliases: project.aliases,
+            status: project.status,
             current: project.projectId === snapshot.session.projectId,
           }));
         result = { projects };
