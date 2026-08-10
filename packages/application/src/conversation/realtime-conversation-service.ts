@@ -5,7 +5,10 @@ export interface RealtimeSessionConfiguration {
   readonly type: 'realtime';
   readonly model: string;
   readonly instructions: string;
-  readonly audio: { readonly output: { readonly voice: string } };
+  readonly audio: {
+    readonly input: { readonly transcription: { readonly model: string } };
+    readonly output: { readonly voice: string };
+  };
   readonly tools: readonly RealtimeFunctionTool[];
   readonly tool_choice: 'auto';
 }
@@ -36,7 +39,11 @@ export class RealtimeConversationService {
   constructor(
     private readonly conversations: ConversationRuntime,
     private readonly provider: RealtimeSessionProvider,
-    private readonly options: { readonly model: string; readonly voice: string },
+    private readonly options: {
+      readonly model: string;
+      readonly voice: string;
+      readonly transcriptionModel: string;
+    },
   ) {}
 
   async connect(sessionId: string, principalId: string, sdp: string): Promise<RealtimeCallAnswer> {
@@ -50,6 +57,11 @@ export class RealtimeConversationService {
       .slice(-12)
       .map((turn) => `${turn.role}: ${turn.text}`)
       .join('\n');
+    const projectMemory = (
+      await this.conversations.projectMemory(principalId, snapshot.session.projectId, 3)
+    )
+      .map((turn) => turn.text)
+      .join('\n\n');
     return this.provider.createCall({
       sdp,
       safetyIdentifier: createHash('sha256').update(principalId).digest('hex'),
@@ -63,14 +75,22 @@ export class RealtimeConversationService {
           'Use search_project_knowledge when Peter asks about a project, document, email, decision, status, risk, or prior communication. Ground the answer in returned sources and name the source titles naturally.',
           'If project knowledge search returns partial or unavailable sources, say which source was unavailable. Never invent missing project facts.',
           'Use propose_artifact_create only when Peter clearly asks to save or create a document. The proposal remains subject to server policy and confirmation.',
+          'Use capture_follow_up when Peter asks you to remember, track, or follow up on an action. Repeat the captured action and any stated timing after the tool confirms it.',
+          'Use select_project when Peter naturally names a different project. Do not switch projects unless the server confirms one unambiguous active match.',
           drivingInstruction,
+          projectMemory.length === 0
+            ? ''
+            : `Durable memory from prior conversations for this project:\n${projectMemory}`,
           recentContext.length === 0
             ? ''
             : `Recent durable conversation context:\n${recentContext}`,
         ]
           .filter((value) => value.length > 0)
           .join('\n\n'),
-        audio: { output: { voice: this.options.voice } },
+        audio: {
+          input: { transcription: { model: this.options.transcriptionModel } },
+          output: { voice: this.options.voice },
+        },
         tools: [
           {
             type: 'function',
@@ -108,6 +128,45 @@ export class RealtimeConversationService {
                 text: { type: 'string', description: 'Complete document text.' },
               },
               required: ['title', 'text'],
+            },
+          },
+          {
+            type: 'function',
+            name: 'capture_follow_up',
+            description:
+              'Capture a requested follow-up or action in the active project through Pendleton OS policy, verification, and audit controls.',
+            parameters: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                action: { type: 'string', description: 'The specific follow-up action.' },
+                timing: {
+                  type: 'string',
+                  description: 'Any date, deadline, or timing Peter stated, in his own words.',
+                },
+                context: {
+                  type: 'string',
+                  description: 'Brief supporting context needed to understand the action.',
+                },
+              },
+              required: ['action'],
+            },
+          },
+          {
+            type: 'function',
+            name: 'select_project',
+            description:
+              'Switch the active conversation to a project Peter names naturally, using the governed project registry and its aliases.',
+            parameters: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                alias: {
+                  type: 'string',
+                  description: 'The project name or alias exactly as Peter expressed it.',
+                },
+              },
+              required: ['alias'],
             },
           },
         ],

@@ -2,9 +2,9 @@
 
 Status: Production deployed with realtime voice and secure mobile device pairing
 
-Version: 1.2.0
+Version: 1.3.0
 
-Date: 2026-08-08
+Date: 2026-08-10
 
 ## Purpose
 
@@ -23,6 +23,8 @@ Raw audio is not retained in v1. Only text transcripts and explicit tool/action 
 - `POST /v1/conversations` starts a session.
 - `GET /v1/conversations/{sessionId}` resumes the session with up to 50 recent turns.
 - `POST /v1/conversations/{sessionId}/turns` appends an idempotent transcript or action record.
+- `POST /v1/conversations/{sessionId}/realtime-events` ingests a normalized final user or assistant transcript event.
+- `POST /v1/conversations/{sessionId}/tools` brokers an allowlisted Realtime tool call on the server.
 - `POST /v1/conversations/{sessionId}/close` closes the session while retaining its record.
 - `POST /v1/conversations/{sessionId}/realtime` accepts an authenticated WebRTC SDP offer and returns the provider SDP answer.
 - `GET /voice` serves the mobile WebRTC client used from iPhone Safari or an installed home-screen shortcut.
@@ -37,15 +39,17 @@ The migrations explicitly revoke access from Supabase `anon` and `authenticated`
 
 ## Deliberate v1 boundary
 
-The Realtime integration uses `gpt-realtime-2.1` with the `marin` voice by default. The standard OpenAI API key stays on the Pendleton OS server. The mobile client receives only the SDP answer needed to establish its WebRTC media connection. The model receives recent durable transcript context and may call `propose_artifact_create`; the tool is explicitly a proposal and cannot bypass Pendleton OS policy, confirmation, verification, or audit controls.
+The Realtime integration uses `gpt-realtime-2.1` with the `marin` voice by default. The standard OpenAI API key stays on the Pendleton OS server. The mobile client receives only the SDP answer needed to establish its WebRTC media connection. The model receives recent durable transcript context and prior project conversation recaps. It may call `propose_artifact_create`; the tool is explicitly a proposal and cannot bypass Pendleton OS policy, confirmation, verification, or audit controls.
 
 The model may also call `search_project_knowledge`. That read-only tool searches the session's
 server-bound active project across governed Google Drive, Gmail, and Outlook sources. The phone
 receives only bounded result metadata and excerpts, while the aggregate query and successful
 provider reads are recorded in the kernel audit trail without storing query text or source content.
 
-The mobile page starts and closes durable voice sessions, requests microphone access, plays realtime assistant audio, reports connection state, and provides a large explicit interruption control. The permanent access token is never entered or retained on the phone. A server-validated, rate-limited device PIN grants a signed 30-day secure device cookie; the one-time desktop QR ceremony remains available as recovery. The PIN is held only in the production secret store and grants paired-device authority rather than administrator authority. When the model proposes an internal artifact, the client submits it through the existing authenticated voice gateway and returns the real policy/workflow result to the model before conversation continues.
+The mobile page starts and closes durable voice sessions, requests microphone access, plays realtime assistant audio, reports connection state, and provides a large explicit interruption control. The permanent access token is never entered or retained on the phone. A server-validated, rate-limited device PIN grants a signed 30-day secure device cookie; the one-time desktop QR ceremony remains available as recovery. The PIN is held only in the production secret store and grants paired-device authority rather than administrator authority.
 
-This slice does not yet provide server-side sideband tool execution, automatic transcript event
-ingestion, or long-session summarization. Those capabilities attach to this runtime without
-changing its authority boundaries.
+The browser forwards only normalized final transcript events and model function-call envelopes to the authenticated conversation API. Tool dispatch, active-project scope, policy evaluation, verification, and durable result recording occur on the server. Final user and assistant transcripts are retried and written idempotently. Closing a session produces a bounded durable recap, and subsequent sessions for the same principal and project receive recent recaps as project memory.
+
+`select_project` resolves a natural project name through the governed alias registry and changes the session scope only for one unambiguous, active, authorized project. `capture_follow_up` converts an explicit request to remember or track an action into the same verified internal-artifact workflow used by other voice actions.
+
+Provider-native sideband WebSocket control remains a future transport hardening option. The v1.3 authority boundary does not depend on browser-owned business logic: the browser transports the function-call envelope, while Pendleton OS alone validates and executes it.

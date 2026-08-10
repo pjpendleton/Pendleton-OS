@@ -677,6 +677,185 @@ export const buildApi = (
       return reply.code(status).send({ errors: [{ code }] });
     }
   });
+  app.post('/v1/conversations/:sessionId/realtime-events', async (request, reply) => {
+    if (!authorized(request.headers)) {
+      return reply.code(401).send({ errors: [{ code: 'AUTHENTICATION_REQUIRED' }] });
+    }
+    if (options.conversation === undefined) {
+      return reply.code(503).send({ errors: [{ code: 'CONVERSATION_NOT_CONFIGURED' }] });
+    }
+    const { sessionId } = request.params as { sessionId: string };
+    const body = request.body as Record<string, unknown> | undefined;
+    const eventType = body?.type;
+    const eventId = typeof body?.eventId === 'string' ? body.eventId.trim() : '';
+    const text = typeof body?.text === 'string' ? body.text.trim() : '';
+    if (eventType !== 'user_transcript' && eventType !== 'assistant_transcript') {
+      return reply.code(400).send({ errors: [{ code: 'REALTIME_EVENT_TYPE_INVALID' }] });
+    }
+    if (eventId.length < 3 || eventId.length > 200) {
+      return reply.code(400).send({ errors: [{ code: 'REALTIME_EVENT_ID_INVALID' }] });
+    }
+    if (text.length === 0 || text.length > 20_000) {
+      return reply.code(400).send({ errors: [{ code: 'REALTIME_TRANSCRIPT_INVALID' }] });
+    }
+    try {
+      const turn = await options.conversation.runtime.append({
+        sessionId,
+        principalId: options.conversation.principalId,
+        role: eventType === 'user_transcript' ? 'user' : 'assistant',
+        kind: 'message',
+        text,
+        idempotencyKey: `realtime:${eventType}:${eventId}`,
+      });
+      return await reply.code(201).send(turn);
+    } catch (error) {
+      const code = error instanceof Error ? error.message : 'CONVERSATION_INTERNAL_ERROR';
+      const status =
+        code === 'CONVERSATION_ACCESS_DENIED' ? 403 : code === 'CONVERSATION_NOT_FOUND' ? 404 : 409;
+      return reply.code(status).send({ errors: [{ code }] });
+    }
+  });
+  app.post('/v1/conversations/:sessionId/tools', async (request, reply) => {
+    if (!authorized(request.headers)) {
+      return reply.code(401).send({ errors: [{ code: 'AUTHENTICATION_REQUIRED' }] });
+    }
+    if (options.conversation === undefined) {
+      return reply.code(503).send({ errors: [{ code: 'CONVERSATION_NOT_CONFIGURED' }] });
+    }
+    const { sessionId } = request.params as { sessionId: string };
+    const body = request.body as Record<string, unknown> | undefined;
+    const callId = typeof body?.callId === 'string' ? body.callId.trim() : '';
+    const name = typeof body?.name === 'string' ? body.name.trim() : '';
+    const args =
+      typeof body?.arguments === 'object' &&
+      body.arguments !== null &&
+      !Array.isArray(body.arguments)
+        ? (body.arguments as Record<string, unknown>)
+        : undefined;
+    const allowedTools = new Set([
+      'search_project_knowledge',
+      'propose_artifact_create',
+      'capture_follow_up',
+      'select_project',
+    ]);
+    if (callId.length < 8 || callId.length > 200) {
+      return reply.code(400).send({ errors: [{ code: 'TOOL_CALL_ID_INVALID' }] });
+    }
+    if (!allowedTools.has(name)) {
+      return reply.code(400).send({ errors: [{ code: 'TOOL_NOT_ALLOWED' }] });
+    }
+    if (args === undefined) {
+      return reply.code(400).send({ errors: [{ code: 'TOOL_ARGUMENTS_INVALID' }] });
+    }
+    try {
+      const snapshot = await options.conversation.runtime.resume(
+        sessionId,
+        options.conversation.principalId,
+      );
+      let result: unknown;
+      if (name === 'search_project_knowledge') {
+        if (options.knowledge === undefined) throw new Error('KNOWLEDGE_NOT_CONFIGURED');
+        const query = typeof args.query === 'string' ? args.query.trim() : '';
+        const maxResults = typeof args.maxResults === 'number' ? args.maxResults : 5;
+        result = await options.knowledge.service.search({
+          actorId: options.knowledge.actorId,
+          projectId: snapshot.session.projectId,
+          query,
+          maxResults,
+        });
+      } else if (name === 'select_project') {
+        if (options.projectRegistry === undefined)
+          throw new Error('PROJECT_REGISTRY_NOT_CONFIGURED');
+        const alias = typeof args.alias === 'string' ? args.alias.trim() : '';
+        if (alias.length === 0) throw new Error('PROJECT_SELECTOR_INVALID');
+        const candidates = (await options.projectRegistry.registry.findByAlias(alias)).filter(
+          (project) =>
+            project.status === 'active' &&
+            project.authorizedActorIds.includes(options.projectRegistry?.ownerActorId ?? ''),
+        );
+        if (candidates.length === 0) throw new Error('PROJECT_NOT_FOUND');
+        if (candidates.length > 1) throw new Error('PROJECT_AMBIGUOUS');
+        const selected = candidates[0];
+        if (selected === undefined) throw new Error('PROJECT_NOT_FOUND');
+        const session = await options.conversation.runtime.switchProject(
+          sessionId,
+          options.conversation.principalId,
+          selected.projectId,
+        );
+        result = {
+          projectId: session.projectId,
+          displayName: selected.displayName ?? selected.projectId,
+        };
+      } else {
+        const drivingMode = snapshot.session.drivingMode;
+        const action = typeof args.action === 'string' ? args.action.trim() : '';
+        const timing = typeof args.timing === 'string' ? args.timing.trim() : '';
+        const context = typeof args.context === 'string' ? args.context.trim() : '';
+        const title =
+          name === 'capture_follow_up'
+            ? `Follow-up - ${action.slice(0, 120)}`
+            : typeof args.title === 'string'
+              ? args.title.trim()
+              : '';
+        const text =
+          name === 'capture_follow_up'
+            ? [
+                `Action: ${action}`,
+                timing.length > 0 ? `Timing: ${timing}` : '',
+                context.length > 0 ? `Context: ${context}` : '',
+              ]
+                .filter((value) => value.length > 0)
+                .join('\n')
+            : typeof args.text === 'string'
+              ? args.text.trim()
+              : '';
+        if (title.length === 0) throw new Error('TITLE_REQUIRED');
+        if (text.length === 0) throw new Error('TEXT_REQUIRED');
+        result = await gateway.execute({
+          principalId: options.conversation.principalId,
+          project: { projectId: snapshot.session.projectId },
+          command: {
+            commandType: 'artifact.create',
+            idempotencyKey: callId,
+            interfaceContext: { channel: 'voice', drivingMode },
+            payload: { title, text },
+          },
+          policy: {
+            operation: 'artifact.create_internal',
+            dataClassification: 'internal',
+            grantedScope: true,
+            verificationAvailable: true,
+          },
+        });
+      }
+      const output = { ok: true, result };
+      await options.conversation.runtime.append({
+        sessionId,
+        principalId: options.conversation.principalId,
+        role: 'tool',
+        kind: 'action_result',
+        text: JSON.stringify({ name, ...output }).slice(0, 10_000),
+        idempotencyKey: `tool:${callId}`,
+      });
+      return output;
+    } catch (error) {
+      const code = error instanceof Error ? error.message : 'TOOL_EXECUTION_FAILED';
+      const output = { ok: false, error: { code } };
+      try {
+        await options.conversation.runtime.append({
+          sessionId,
+          principalId: options.conversation.principalId,
+          role: 'tool',
+          kind: 'action_result',
+          text: JSON.stringify({ name, ...output }),
+          idempotencyKey: `tool:${callId}`,
+        });
+      } catch (appendError) {
+        request.log.warn({ err: appendError }, 'conversation tool failure could not be recorded');
+      }
+      return output;
+    }
+  });
   app.post('/v1/conversations/:sessionId/close', async (request, reply) => {
     if (!authorized(request.headers)) {
       return reply.code(401).send({ errors: [{ code: 'AUTHENTICATION_REQUIRED' }] });

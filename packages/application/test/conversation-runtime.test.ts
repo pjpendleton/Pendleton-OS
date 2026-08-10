@@ -33,6 +33,17 @@ class MemoryConversations implements ConversationRepository {
     this.sessions.set(sessionId, updated);
     return Promise.resolve(updated);
   }
+  updateSessionProject(
+    sessionId: string,
+    projectId: string,
+    at: string,
+  ): Promise<ConversationSession | undefined> {
+    const current = this.sessions.get(sessionId);
+    if (current === undefined) return Promise.resolve(undefined);
+    const updated = { ...current, projectId, lastActivityAt: at };
+    this.sessions.set(sessionId, updated);
+    return Promise.resolve(updated);
+  }
   appendTurn(input: Omit<ConversationTurn, 'sequence'>): Promise<ConversationTurn> {
     const turn = { ...input, sequence: this.turns.length + 1 };
     this.turns.push(turn);
@@ -50,6 +61,22 @@ class MemoryConversations implements ConversationRepository {
   }
   listTurns(sessionId: string, limit: number): Promise<readonly ConversationTurn[]> {
     return Promise.resolve(this.turns.filter((turn) => turn.sessionId === sessionId).slice(-limit));
+  }
+  listProjectSummaries(
+    principalId: string,
+    projectId: string,
+    limit: number,
+  ): Promise<readonly ConversationTurn[]> {
+    const sessionIds = new Set(
+      [...this.sessions.values()]
+        .filter((session) => session.principalId === principalId && session.projectId === projectId)
+        .map((session) => session.sessionId),
+    );
+    return Promise.resolve(
+      this.turns
+        .filter((turn) => sessionIds.has(turn.sessionId) && turn.kind === 'summary')
+        .slice(-limit),
+    );
   }
 }
 
@@ -117,5 +144,34 @@ describe('ConversationRuntime', () => {
         idempotencyKey: 'utterance-0002',
       }),
     ).rejects.toThrow('CONVERSATION_CLOSED');
+  });
+
+  it('creates project memory on close and can switch an active session by project', async () => {
+    const repository = new MemoryConversations();
+    let id = 0;
+    const runtime = new ConversationRuntime(
+      repository,
+      () => `00000000-0000-4000-8000-${String(++id).padStart(12, '0')}`,
+      () => new Date('2026-08-07T12:00:00.000Z'),
+    );
+    const session = await runtime.start({
+      principalId: 'peter',
+      projectId: 'pendleton-os',
+      channel: 'voice',
+      drivingMode: true,
+    });
+    await runtime.append({
+      sessionId: session.sessionId,
+      principalId: 'peter',
+      role: 'user',
+      kind: 'message',
+      text: 'Remember that the permit follow-up is due Friday.',
+      idempotencyKey: 'utterance-memory-0001',
+    });
+    await runtime.switchProject(session.sessionId, 'peter', 'parkco');
+    await runtime.close(session.sessionId, 'peter');
+    const memory = await runtime.projectMemory('peter', 'parkco');
+    expect(memory).toHaveLength(1);
+    expect(memory[0]?.text).toContain('permit follow-up is due Friday');
   });
 });

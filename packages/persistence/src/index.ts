@@ -528,6 +528,21 @@ export class PostgresConversationRepository implements ConversationRepository {
     return row === undefined ? undefined : mapSession(row);
   }
 
+  async updateSessionProject(
+    sessionId: string,
+    projectId: string,
+    at: string,
+  ): Promise<ConversationSession | undefined> {
+    const result = await this.client.query<ConversationSessionRow>(
+      `UPDATE conversation_sessions
+       SET project_id=$2,last_activity_at=$3
+       WHERE session_id=$1 RETURNING *`,
+      [sessionId, projectId, at],
+    );
+    const row = result.rows[0];
+    return row === undefined ? undefined : mapSession(row);
+  }
+
   async appendTurn(input: Omit<ConversationTurn, 'sequence'>): Promise<ConversationTurn> {
     const result = await this.client.query<ConversationTurnRow>(
       `WITH inserted AS (
@@ -576,5 +591,20 @@ export class PostgresConversationRepository implements ConversationRepository {
       [sessionId, limit],
     );
     return result.rows.map(mapTurn);
+  }
+
+  async listProjectSummaries(
+    principalId: string,
+    projectId: string,
+    limit: number,
+  ): Promise<readonly ConversationTurn[]> {
+    const result = await this.client.query<ConversationTurnRow>(
+      `SELECT t.* FROM conversation_turns t
+       JOIN conversation_sessions s ON s.session_id=t.session_id
+       WHERE s.principal_id=$1 AND s.project_id=$2 AND t.kind='summary'
+       ORDER BY t.created_at DESC LIMIT $3`,
+      [principalId, projectId, limit],
+    );
+    return [...result.rows].reverse().map(mapTurn);
   }
 }
