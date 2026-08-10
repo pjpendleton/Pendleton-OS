@@ -18,6 +18,7 @@ export default tseslint.config(
             'packages/contracts/test/*.ts',
             'packages/application/test/*.ts',
             'packages/adapters/test/*.ts',
+            'packages/persistence/test/*.ts',
             'apps/api/test/*.ts',
           ],
           maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING: 32,

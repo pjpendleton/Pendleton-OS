@@ -520,7 +520,12 @@ export class PostgresConversationRepository implements ConversationRepository {
   ): Promise<ConversationSession | undefined> {
     const result = await this.client.query<ConversationSessionRow>(
       `UPDATE conversation_sessions
-       SET status=$2,last_activity_at=$3,closed_at=CASE WHEN $2='closed' THEN $3 ELSE NULL END
+       SET status=$2::text,
+           last_activity_at=$3::timestamptz,
+           closed_at=CASE
+             WHEN $2::text='closed' THEN $3::timestamptz
+             ELSE NULL::timestamptz
+           END
        WHERE session_id=$1 RETURNING *`,
       [sessionId, status, at],
     );
