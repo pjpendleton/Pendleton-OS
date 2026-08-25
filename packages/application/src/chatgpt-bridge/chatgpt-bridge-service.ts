@@ -105,7 +105,7 @@ export class ChatGptBridgeService {
       receivedAt,
     );
     await this.events.record({
-      eventId: `event:${this.createId()}`,
+      eventId: this.createId(),
       eventType: 'connector.chatgpt.inventory.accepted',
       eventVersion: 1,
       occurredAt: receivedAt,
