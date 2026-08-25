@@ -4,6 +4,8 @@ import {
   type VoiceArtifactRequest,
 } from '@pendleton-os/contracts';
 import type {
+  ChatGptBridgeService,
+  ChatGptInventoryInput,
   ConversationRuntime,
   EmailAccessService,
   ProjectCandidateInput,
@@ -14,6 +16,7 @@ import type {
   ProjectStatus,
   RealtimeConversationService,
 } from '@pendleton-os/application';
+import { CHATGPT_BRIDGE_CONTRACT_VERSION } from '@pendleton-os/application';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { randomUUID } from 'node:crypto';
 import QRCode from 'qrcode';
@@ -38,6 +41,192 @@ const projectResourceTypes = new Set<ProjectResourceType>([
   'other',
 ]);
 const projectIdPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const chatGptCollections = new Set(['projects', 'conversations', 'sources']);
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+const hasOnlyKeys = (value: Record<string, unknown>, allowed: readonly string[]): boolean =>
+  Object.keys(value).every((key) => allowed.includes(key));
+const chatGptUrl = (value: unknown): string | undefined => {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || value.length > 2_048) return undefined;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'https:' && parsed.hostname === 'chatgpt.com'
+      ? parsed.href
+      : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+const parseChatGptInventory = (value: unknown): ChatGptInventoryInput | undefined => {
+  if (!isRecord(value)) return undefined;
+  if (
+    !hasOnlyKeys(value, [
+      'contractVersion',
+      'snapshotKey',
+      'scope',
+      'observedCollections',
+      'collectorVersion',
+      'capturedAt',
+      'workspaceLabel',
+      'pageUrl',
+      'projects',
+    ]) ||
+    value.contractVersion !== CHATGPT_BRIDGE_CONTRACT_VERSION ||
+    typeof value.snapshotKey !== 'string' ||
+    value.snapshotKey.trim().length < 8 ||
+    value.snapshotKey.length > 200 ||
+    (value.scope !== 'project-list' && value.scope !== 'project-detail') ||
+    !Array.isArray(value.observedCollections) ||
+    value.observedCollections.length === 0 ||
+    value.observedCollections.length > 3 ||
+    !value.observedCollections.every(
+      (collection) => typeof collection === 'string' && chatGptCollections.has(collection),
+    ) ||
+    new Set(value.observedCollections).size !== value.observedCollections.length ||
+    typeof value.collectorVersion !== 'string' ||
+    value.collectorVersion.trim().length === 0 ||
+    value.collectorVersion.length > 40 ||
+    typeof value.capturedAt !== 'string' ||
+    !Number.isFinite(Date.parse(value.capturedAt)) ||
+    typeof value.workspaceLabel !== 'string' ||
+    value.workspaceLabel.trim().length === 0 ||
+    value.workspaceLabel.length > 160 ||
+    chatGptUrl(value.pageUrl) === undefined ||
+    !Array.isArray(value.projects) ||
+    value.projects.length === 0 ||
+    value.projects.length > 250 ||
+    (value.scope === 'project-detail' && value.projects.length !== 1)
+  )
+    return undefined;
+
+  const projects: ChatGptInventoryInput['projects'][number][] = [];
+  for (const rawProject of value.projects) {
+    if (
+      !isRecord(rawProject) ||
+      !hasOnlyKeys(rawProject, [
+        'sourceProjectKey',
+        'locatorKind',
+        'displayName',
+        'canonicalUrl',
+        'modifiedLabel',
+        'conversations',
+        'sources',
+      ]) ||
+      typeof rawProject.sourceProjectKey !== 'string' ||
+      rawProject.sourceProjectKey.trim().length < 8 ||
+      rawProject.sourceProjectKey.length > 256 ||
+      (rawProject.locatorKind !== 'provider-id' && rawProject.locatorKind !== 'derived-name') ||
+      typeof rawProject.displayName !== 'string' ||
+      rawProject.displayName.trim().length === 0 ||
+      rawProject.displayName.length > 200 ||
+      (rawProject.canonicalUrl !== undefined &&
+        chatGptUrl(rawProject.canonicalUrl) === undefined) ||
+      (rawProject.modifiedLabel !== undefined &&
+        (typeof rawProject.modifiedLabel !== 'string' || rawProject.modifiedLabel.length > 100)) ||
+      !Array.isArray(rawProject.conversations) ||
+      rawProject.conversations.length > 500 ||
+      !Array.isArray(rawProject.sources) ||
+      rawProject.sources.length > 500
+    )
+      return undefined;
+    const conversations: ChatGptInventoryInput['projects'][number]['conversations'][number][] = [];
+    for (const rawConversation of rawProject.conversations) {
+      if (
+        !isRecord(rawConversation) ||
+        !hasOnlyKeys(rawConversation, [
+          'sourceConversationKey',
+          'title',
+          'canonicalUrl',
+          'modifiedLabel',
+        ]) ||
+        typeof rawConversation.sourceConversationKey !== 'string' ||
+        rawConversation.sourceConversationKey.trim().length < 8 ||
+        rawConversation.sourceConversationKey.length > 256 ||
+        typeof rawConversation.title !== 'string' ||
+        rawConversation.title.trim().length === 0 ||
+        rawConversation.title.length > 300 ||
+        (rawConversation.canonicalUrl !== undefined &&
+          chatGptUrl(rawConversation.canonicalUrl) === undefined) ||
+        (rawConversation.modifiedLabel !== undefined &&
+          (typeof rawConversation.modifiedLabel !== 'string' ||
+            rawConversation.modifiedLabel.length > 100))
+      )
+        return undefined;
+      conversations.push({
+        sourceConversationKey: rawConversation.sourceConversationKey.trim(),
+        title: rawConversation.title.trim(),
+        ...(rawConversation.canonicalUrl === undefined
+          ? {}
+          : { canonicalUrl: chatGptUrl(rawConversation.canonicalUrl) as string }),
+        ...(rawConversation.modifiedLabel === undefined
+          ? {}
+          : { modifiedLabel: rawConversation.modifiedLabel.trim() }),
+      });
+    }
+    const sources: ChatGptInventoryInput['projects'][number]['sources'][number][] = [];
+    for (const rawSource of rawProject.sources) {
+      if (
+        !isRecord(rawSource) ||
+        !hasOnlyKeys(rawSource, [
+          'sourceKey',
+          'displayName',
+          'mediaType',
+          'detailLabel',
+          'contentAccess',
+        ]) ||
+        typeof rawSource.sourceKey !== 'string' ||
+        rawSource.sourceKey.trim().length < 8 ||
+        rawSource.sourceKey.length > 256 ||
+        typeof rawSource.displayName !== 'string' ||
+        rawSource.displayName.trim().length === 0 ||
+        rawSource.displayName.length > 300 ||
+        (rawSource.mediaType !== undefined &&
+          (typeof rawSource.mediaType !== 'string' || rawSource.mediaType.length > 160)) ||
+        (rawSource.detailLabel !== undefined &&
+          (typeof rawSource.detailLabel !== 'string' || rawSource.detailLabel.length > 200)) ||
+        (rawSource.contentAccess !== 'available' &&
+          rawSource.contentAccess !== 'metadata-only' &&
+          rawSource.contentAccess !== 'unknown')
+      )
+        return undefined;
+      sources.push({
+        sourceKey: rawSource.sourceKey.trim(),
+        displayName: rawSource.displayName.trim(),
+        ...(rawSource.mediaType === undefined ? {} : { mediaType: rawSource.mediaType.trim() }),
+        ...(rawSource.detailLabel === undefined
+          ? {}
+          : { detailLabel: rawSource.detailLabel.trim() }),
+        contentAccess: rawSource.contentAccess,
+      });
+    }
+    projects.push({
+      sourceProjectKey: rawProject.sourceProjectKey.trim(),
+      locatorKind: rawProject.locatorKind,
+      displayName: rawProject.displayName.trim(),
+      ...(rawProject.canonicalUrl === undefined
+        ? {}
+        : { canonicalUrl: chatGptUrl(rawProject.canonicalUrl) as string }),
+      ...(rawProject.modifiedLabel === undefined
+        ? {}
+        : { modifiedLabel: rawProject.modifiedLabel.trim() }),
+      conversations,
+      sources,
+    });
+  }
+  return {
+    contractVersion: CHATGPT_BRIDGE_CONTRACT_VERSION,
+    snapshotKey: value.snapshotKey.trim(),
+    scope: value.scope,
+    observedCollections: value.observedCollections as ChatGptInventoryInput['observedCollections'],
+    collectorVersion: value.collectorVersion.trim(),
+    capturedAt: new Date(value.capturedAt).toISOString(),
+    workspaceLabel: value.workspaceLabel.trim(),
+    pageUrl: chatGptUrl(value.pageUrl) as string,
+    projects,
+  };
+};
 
 const parseProjectCandidates = (value: unknown): readonly ProjectCandidateInput[] | undefined => {
   if (!Array.isArray(value) || value.length === 0 || value.length > 100) return undefined;
@@ -156,6 +345,11 @@ export const buildApi = (
       registry: ProjectRegistry;
       ownerActorId: string;
     };
+    chatGptBridge?: {
+      service: ChatGptBridgeService;
+      actorId: string;
+      bridgeToken: string;
+    };
     email?: {
       service: EmailAccessService;
       actorId: string;
@@ -203,6 +397,9 @@ export const buildApi = (
       options.devicePairing.service.cookieFromHeader(headers.cookie),
     ) ??
       false);
+  const chatGptBridgeAuthorized = (authorization: string | undefined): boolean =>
+    options.chatGptBridge !== undefined &&
+    authorization === `Bridge ${options.chatGptBridge.bridgeToken}`;
   const statusForDisposition = (disposition: string): number =>
     disposition === 'accepted'
       ? 202
@@ -330,6 +527,42 @@ export const buildApi = (
       return reply.code(404).send({ errors: [{ code: 'PROJECT_NOT_FOUND' }] });
     const resources = await options.projectRegistry.registry.getResources(projectId);
     return { project, resources };
+  });
+  app.post('/v1/connectors/chatgpt/inventory', async (request, reply) => {
+    if (!chatGptBridgeAuthorized(request.headers.authorization)) {
+      return reply.code(401).send({ errors: [{ code: 'BRIDGE_AUTHENTICATION_REQUIRED' }] });
+    }
+    const input = parseChatGptInventory(request.body);
+    if (input === undefined) {
+      return reply.code(400).send({ errors: [{ code: 'CHATGPT_INVENTORY_INVALID' }] });
+    }
+    const receipt = await options.chatGptBridge?.service.ingest(
+      input,
+      options.chatGptBridge.actorId,
+    );
+    return reply.code(receipt?.replayed === true ? 200 : 202).send({ receipt });
+  });
+  app.get('/v1/connectors/chatgpt/projects', async (request, reply) => {
+    if (!authorized(request.headers)) {
+      return reply.code(401).send({ errors: [{ code: 'AUTHENTICATION_REQUIRED' }] });
+    }
+    if (options.chatGptBridge === undefined) {
+      return reply.code(503).send({ errors: [{ code: 'CHATGPT_BRIDGE_NOT_CONFIGURED' }] });
+    }
+    return { projects: await options.chatGptBridge.service.listProjects() };
+  });
+  app.get('/v1/connectors/chatgpt/projects/:sourceProjectKey', async (request, reply) => {
+    if (!authorized(request.headers)) {
+      return reply.code(401).send({ errors: [{ code: 'AUTHENTICATION_REQUIRED' }] });
+    }
+    if (options.chatGptBridge === undefined) {
+      return reply.code(503).send({ errors: [{ code: 'CHATGPT_BRIDGE_NOT_CONFIGURED' }] });
+    }
+    const { sourceProjectKey } = request.params as { sourceProjectKey: string };
+    const project = await options.chatGptBridge.service.findProject(sourceProjectKey);
+    return project === undefined
+      ? reply.code(404).send({ errors: [{ code: 'CHATGPT_PROJECT_NOT_FOUND' }] })
+      : { project };
   });
   app.post('/v1/projects/import', async (request, reply) => {
     if (!administratorAuthorized(request.headers.authorization)) {

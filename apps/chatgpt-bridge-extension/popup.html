@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pendleton OS Bridge</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Pendleton OS Bridge</h1>
+      <p>Open ChatGPT Projects or a project’s Chats/Sources tab, then scan this page.</p>
+      <label>
+        Pendleton OS URL
+        <input id="endpoint" type="url" value="https://os.peterpendleton.com" />
+      </label>
+      <label>
+        Scoped bridge token
+        <input id="token" type="password" autocomplete="off" />
+      </label>
+      <button id="scan" type="button">Scan current page</button>
+      <output id="status" role="status">Ready.</output>
+      <p class="privacy">
+        Metadata only. No browser cookies, chat bodies, or file contents are sent.
+      </p>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

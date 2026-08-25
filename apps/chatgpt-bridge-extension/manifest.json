@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "Pendleton OS ChatGPT Bridge",
+  "version": "1.0.0",
+  "description": "Sends user-selected ChatGPT project metadata to Pendleton OS.",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "host_permissions": ["https://chatgpt.com/*", "https://os.peterpendleton.com/*"],
+  "action": {
+    "default_title": "Pendleton OS Bridge",
+    "default_popup": "popup.html"
+  }
+}

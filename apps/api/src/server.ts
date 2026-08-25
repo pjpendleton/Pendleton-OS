@@ -7,6 +7,10 @@ const start = async (): Promise<void> => {
   if (apiToken === undefined || apiToken.length < 32) {
     throw new Error('PENDLETON_API_TOKEN_REQUIRED');
   }
+  const chatGptBridgeToken = process.env.PENDLETON_CHATGPT_BRIDGE_TOKEN;
+  if (chatGptBridgeToken !== undefined && chatGptBridgeToken.length < 32) {
+    throw new Error('PENDLETON_CHATGPT_BRIDGE_TOKEN_INVALID');
+  }
 
   const runtime = await buildProductionRuntime();
   const devicePairing = new DevicePairingService(apiToken, {
@@ -39,6 +43,15 @@ const start = async (): Promise<void> => {
       registry: runtime.projects,
       ownerActorId: process.env.PENDLETON_ACTOR_ID ?? '018f1f91-6f3d-7c16-bc61-55f9fa334f12',
     },
+    ...(chatGptBridgeToken === undefined
+      ? {}
+      : {
+          chatGptBridge: {
+            service: runtime.chatGptBridge,
+            actorId: process.env.PENDLETON_ACTOR_ID ?? '018f1f91-6f3d-7c16-bc61-55f9fa334f12',
+            bridgeToken: chatGptBridgeToken,
+          },
+        }),
     email: {
       service: runtime.email,
       actorId: process.env.PENDLETON_ACTOR_ID ?? '018f1f91-6f3d-7c16-bc61-55f9fa334f12',

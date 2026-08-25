@@ -1,0 +1,68 @@
+:root {
+  color-scheme: dark;
+  font:
+    14px/1.4 system-ui,
+    sans-serif;
+}
+
+body {
+  width: 340px;
+  margin: 0;
+  background: #0b1222;
+  color: #f4f7ff;
+}
+
+main {
+  padding: 20px;
+}
+
+h1 {
+  margin: 0 0 8px;
+  font-size: 21px;
+}
+
+label {
+  display: block;
+  margin: 14px 0;
+  color: #c9d3e8;
+}
+
+input,
+button {
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 6px;
+  border: 1px solid #394763;
+  border-radius: 9px;
+  padding: 10px;
+}
+
+input {
+  background: #111b30;
+  color: inherit;
+}
+
+button {
+  border-color: #2d6cf6;
+  background: #2d6cf6;
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+output {
+  display: block;
+  min-height: 42px;
+  margin-top: 14px;
+  white-space: pre-wrap;
+}
+
+.privacy {
+  color: #91a0bb;
+  font-size: 12px;
+}

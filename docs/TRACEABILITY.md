@@ -23,6 +23,7 @@
 | Durable conversation runtime      | ADR-003; ADR-004; Voice Operating Contract v1              | VOICE-001     |
 | Voice conversation reliability    | ADR-003; ADR-004; Conversation Runtime v1.4                | VOICE-002     |
 | Voice project discovery           | Project Registry v1; Conversation Runtime v1.4             | VOICE-003     |
+| ChatGPT Business read inventory   | ADR-006; System Design v2; API Contract v1.1; Policy v1.1  | BRIDGE-001    |
 
 Every future material behavior, schema, workflow, provider mutation, or public interface must
 add or update its traceability entry in the same controlled change.

@@ -6,6 +6,10 @@ Version: 1.0.0
 
 Date: 2026-08-08
 
+> Canonical-content note (2026-08-25): ADR-006 and System Design v2 supersede the reference-only
+> model for content imported into or created by Pendleton OS. Existing external-resource references
+> remain valid; an inventory observation is not a project import or activation.
+
 ## Purpose
 
 The Project Registry gives Pendleton OS a durable, governed identity for every project and a verified map to the resources that belong to it. It replaces production's hard-coded project directory and Drive-root mapping without moving or duplicating source files.

@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import {
   ArtifactVerifier,
+  ChatGptBridgeService,
   ConversationRuntime,
   CommandIntakeService,
   ContextResolutionService,
@@ -31,6 +32,7 @@ import {
 } from '@pendleton-os/adapters';
 import {
   PostgresEventStore,
+  PostgresChatGptBridgeRepository,
   PostgresConversationRepository,
   PostgresIdempotencyRegistry,
   PostgresProjectRegistry,
@@ -60,6 +62,7 @@ export interface ProductionRuntime {
   readonly gateway: UnifiedCommandGateway;
   readonly conversations: ConversationRuntime;
   readonly projects: PostgresProjectRegistry;
+  readonly chatGptBridge: ChatGptBridgeService;
   readonly email: EmailAccessService;
   readonly knowledge: ProjectKnowledgeService;
   readonly realtime: RealtimeConversationService | undefined;
@@ -129,6 +132,11 @@ export const buildProductionRuntime = async (): Promise<ProductionRuntime> => {
     );
   }
   const eventRecorder = new EventRecorder({ store: events });
+  const chatGptBridge = new ChatGptBridgeService(
+    new PostgresChatGptBridgeRepository(pool),
+    eventRecorder,
+    randomUUID,
+  );
   const email = new EmailAccessService(emailClients, projects, eventRecorder, randomUUID, (value) =>
     createHash('sha256').update(value).digest('hex'),
   );
@@ -213,6 +221,7 @@ export const buildProductionRuntime = async (): Promise<ProductionRuntime> => {
     gateway,
     conversations,
     projects,
+    chatGptBridge,
     email,
     knowledge,
     realtime,

@@ -115,3 +115,20 @@ export {
   type ProjectKnowledgeSearchResult,
   type ProjectKnowledgeSourceStatus,
 } from './knowledge/project-knowledge-service.js';
+export {
+  CHATGPT_BRIDGE_CONTRACT_VERSION,
+  ChatGptBridgeService,
+  type ChatGptBridgeRepository,
+  type ChatGptContentAccess,
+  type ChatGptConversationObservation,
+  type ChatGptConversationObservationInput,
+  type ChatGptInventoryInput,
+  type ChatGptInventoryReceipt,
+  type ChatGptInventoryScope,
+  type ChatGptLocatorKind,
+  type ChatGptObservationStatus,
+  type ChatGptProjectObservation,
+  type ChatGptProjectObservationInput,
+  type ChatGptSourceObservation,
+  type ChatGptSourceObservationInput,
+} from './chatgpt-bridge/chatgpt-bridge-service.js';

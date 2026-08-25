@@ -6,6 +6,10 @@ Version: 1.0.0
 
 Date: 2026-08-10
 
+> Canonical-content note (2026-08-25): ADR-006 and System Design v2 supersede the provider-authority
+> statement for material explicitly imported into or created by Pendleton OS. Provider search remains
+> read-only; inventory metadata and imported canonical content are separate lifecycles.
+
 ## Purpose
 
 Project Knowledge Retrieval lets an authenticated Pendleton OS conversation answer questions from
