@@ -93,4 +93,3 @@ REVOKE ALL ON TABLE
   FROM anon, authenticated;
 
 COMMIT;
-
