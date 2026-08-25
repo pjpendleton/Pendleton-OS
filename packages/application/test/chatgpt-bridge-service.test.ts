@@ -49,7 +49,7 @@ describe('ChatGptBridgeService', () => {
       input,
       '2026-08-25T17:00:01.000Z',
     );
-    expect(await events.findByCorrelation('chatgpt-snapshot:1')).toMatchObject([
+    expect(await events.findByCorrelation('1')).toMatchObject([
       {
         eventType: 'connector.chatgpt.inventory.accepted',
         actorId: 'actor-1',

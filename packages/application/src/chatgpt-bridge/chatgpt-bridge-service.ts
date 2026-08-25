@@ -109,7 +109,7 @@ export class ChatGptBridgeService {
       eventType: 'connector.chatgpt.inventory.accepted',
       eventVersion: 1,
       occurredAt: receivedAt,
-      correlationId: receipt.snapshotId,
+      correlationId: receipt.snapshotId.replace(/^chatgpt-snapshot:/, ''),
       actorId,
       payload: {
         snapshotId: receipt.snapshotId,
