@@ -3,13 +3,29 @@
 # Requires source DB URL and age keypair; never put plaintext or keys in Git.
 # Usage: SOURCE_DB_URL=... AGE_RECIPIENT=age1... AGE_IDENTITY_FILE=/safe/path \
 #   BACKUP_COMMIT=1 BACKUP_PUSH=1 bash scripts/backup-pendleton-os-encrypted.sh
-set -eo pipefail
+set -euo pipefail
 umask 077
+: "${SOURCE_DB_URL:?Set SOURCE_DB_URL using a private environment variable}"
+: "${AGE_RECIPIENT:?Set the owner-controlled age public recipient}"
+: "${AGE_IDENTITY_FILE:?Set the owner-controlled age private identity file path}"
 
 EXPECTED_REF='fqzwkiuxghqcoequcykg'
 ROOT="$(git rev-parse --show-toplevel)"
-if [[ -z "$SOURCE_DB_URL" || "$SOURCE_DB_URL" != *"$EXPECTED_REF"* ]]; then
-  echo 'Refusing: SOURCE_DB_URL must identify Pendleton OS.' >&2; exit 1
+# Parse the URL rather than merely searching for the expected project ref
+# anywhere (where it could otherwise occur in a password or query string).
+command -v node >/dev/null || { echo 'Node.js is required for connection validation.' >&2; exit 1; }
+if ! PENDLETON_OS_REF="$EXPECTED_REF" node -e '
+  try {
+    const u = new URL(process.env.SOURCE_DB_URL);
+    const ref = process.env.PENDLETON_OS_REF;
+    const user = decodeURIComponent(u.username);
+    const direct = u.hostname === `db.${ref}.supabase.co` && user === "postgres";
+    const pooled = u.hostname.endsWith(".pooler.supabase.com") && user === `postgres.${ref}`;
+    if ((u.protocol !== "postgresql:" && u.protocol !== "postgres:") || (!direct && !pooled)) process.exit(1);
+  } catch { process.exit(1); }
+'; then
+  echo 'Refusing: URL host and username do not match the Pendleton OS project.' >&2
+  exit 1
 fi
 if [[ -z "$AGE_RECIPIENT" || "$AGE_RECIPIENT" != age1* ]]; then
   echo 'Refusing: a verified age recipient public key is required.' >&2; exit 1
