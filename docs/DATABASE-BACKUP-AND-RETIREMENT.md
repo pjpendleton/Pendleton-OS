@@ -14,7 +14,7 @@ The [Pendleton OS repository](https://github.com/pjpendleton/Pendleton-OS) is **
 ## Encrypted database export
 Use [`scripts/backup-pendleton-os-encrypted.sh`](../scripts/backup-pendleton-os-encrypted.sh), based on the official Supabase CLI export workflow.
 
-1. On a trusted machine with Supabase CLI, Docker, Git, and `age`, generate an `age` encryption keypair in a private folder **outside the repository**. Preserve at least two safe copies. The script derives and verifies the public recipient from that private identity.
+1. On a trusted machine with the native PostgreSQL client tools (`pg_dump` and `pg_dumpall`), Git, and `age`, generate an `age` encryption keypair in a private folder **outside the repository**. Docker is not required. Preserve at least two safe copies. The script derives and verifies the public recipient from that private identity.
 2. Obtain the PostgreSQL connection URL privately from the project Dashboard's **Connect** panel. Never paste it into a GitHub file, chat, or build log.
 3. Execute `bash scripts/backup-pendleton-os-encrypted.sh`. If `SOURCE_DB_URL` and `AGE_IDENTITY_FILE` are unset, the script prompts locally; the connection URL is entered with hidden input. Do not put either value in the shell command, shell history, chat, or a file in the repository. The script refuses a URL whose host and username do not match the verified Pendleton OS project reference.
 4. The script deliberately does **not** commit or upload anything. Upload is a separate step after the restore test passes.
