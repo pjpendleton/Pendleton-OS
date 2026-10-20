@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
 # Back up the Pendleton OS Supabase database into ENCRYPTED Git artifacts.
 # Requires source DB URL and age keypair; never put plaintext or keys in Git.
-# Usage: SOURCE_DB_URL=... AGE_RECIPIENT=age1... AGE_IDENTITY_FILE=/safe/path \
-#   BACKUP_COMMIT=1 BACKUP_PUSH=1 bash scripts/backup-pendleton-os-encrypted.sh
+# Usage: bash scripts/backup-pendleton-os-encrypted.sh
+# The script prompts privately for secrets when they are not already set.
 set -euo pipefail
 umask 077
-: "${SOURCE_DB_URL:?Set SOURCE_DB_URL using a private environment variable}"
-: "${AGE_RECIPIENT:?Set the owner-controlled age public recipient}"
-: "${AGE_IDENTITY_FILE:?Set the owner-controlled age private identity file path}"
+
+if [[ -z "${SOURCE_DB_URL:-}" ]]; then
+  read -rsp 'Pendleton OS PostgreSQL connection URL (input hidden): ' SOURCE_DB_URL
+  printf '\n'
+fi
+if [[ -z "${AGE_IDENTITY_FILE:-}" ]]; then
+  read -rp 'Absolute path to age private identity (outside this repo): ' AGE_IDENTITY_FILE
+fi
 
 EXPECTED_REF='fqzwkiuxghqcoequcykg'
 ROOT="$(git rev-parse --show-toplevel)"
@@ -27,15 +32,24 @@ if ! PENDLETON_OS_REF="$EXPECTED_REF" node -e '
   echo 'Refusing: URL host and username do not match the Pendleton OS project.' >&2
   exit 1
 fi
-if [[ -z "$AGE_RECIPIENT" || "$AGE_RECIPIENT" != age1* ]]; then
-  echo 'Refusing: a verified age recipient public key is required.' >&2; exit 1
+if [[ ! -f "$AGE_IDENTITY_FILE" ]]; then
+  echo 'Refusing: the private age identity file does not exist.' >&2; exit 1
 fi
-if [[ ! -f "$AGE_IDENTITY_FILE" || "$AGE_IDENTITY_FILE" == "$ROOT/"* ]]; then
+ROOT_REAL="$(cd "$ROOT" && pwd -P)"
+IDENTITY_DIR_REAL="$(cd "$(dirname "$AGE_IDENTITY_FILE")" && pwd -P)"
+IDENTITY_REAL="$IDENTITY_DIR_REAL/$(basename "$AGE_IDENTITY_FILE")"
+if [[ "$IDENTITY_REAL" == "$ROOT_REAL" || "$IDENTITY_REAL" == "$ROOT_REAL/"* ]]; then
   echo 'Refusing: the private age identity must exist OUTSIDE this Git repo.' >&2; exit 1
 fi
-for executable in supabase docker age tar git; do
+for executable in supabase docker age age-keygen tar cmp git; do
   command -v "$executable" >/dev/null || { echo "Missing $executable" >&2; exit 1; }
 done
+DERIVED_RECIPIENT="$(age-keygen -y "$IDENTITY_REAL")"
+if [[ -z "${AGE_RECIPIENT:-}" ]]; then
+  AGE_RECIPIENT="$DERIVED_RECIPIENT"
+elif [[ "$AGE_RECIPIENT" != "$DERIVED_RECIPIENT" ]]; then
+  echo 'Refusing: AGE_RECIPIENT does not match the supplied private identity.' >&2; exit 1
+fi
 docker info >/dev/null 2>&1 || { echo 'Docker engine must be running.' >&2; exit 1; }
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -54,12 +68,15 @@ mkdir -p "$DEST"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 BASE="pendleton-os-$STAMP.tar.age"
 ARCHIVE="$DEST/$BASE"
+PARTIAL="$ARCHIVE.partial"
 # Stream only encrypted ciphertext into the public Git checkout.
-tar -C "$WORK" -cf - roles.sql schema.sql data.sql | age -r "$AGE_RECIPIENT" -o "$ARCHIVE"
-age -d -i "$AGE_IDENTITY_FILE" "$ARCHIVE" | tar -tf - > "$WORK/archive-list"
+tar -C "$WORK" -cf - roles.sql schema.sql data.sql | age -r "$AGE_RECIPIENT" -o "$PARTIAL"
+mkdir "$WORK/verified"
+age -d -i "$IDENTITY_REAL" "$PARTIAL" | tar -C "$WORK/verified" -xf -
 for f in roles.sql schema.sql data.sql; do
-  grep -Fxq "$f" "$WORK/archive-list" || { echo "Cannot verify $f" >&2; exit 1; }
+  cmp -s "$WORK/$f" "$WORK/verified/$f" || { echo "Cannot verify $f" >&2; exit 1; }
 done
+mv "$PARTIAL" "$ARCHIVE"
 (
   cd "$DEST"
   if command -v sha256sum >/dev/null; then
@@ -70,9 +87,4 @@ done
 ) > "$ARCHIVE.sha256"
 echo "Encrypted and decrypted successfully: $ARCHIVE"
 echo 'NOTE: A fresh-database RESTORE verification is still required.'
-
-if [[ "$BACKUP_COMMIT" == '1' ]]; then
-  git -C "$ROOT" add -- "backups/database/$BASE" "backups/database/$BASE.sha256"
-  git -C "$ROOT" commit -m "backup: encrypted Pendleton OS SQL snapshot $STAMP"
-  if [[ "$BACKUP_PUSH" == '1' ]]; then git -C "$ROOT" push; fi
-fi
+echo 'The artifact was not committed or uploaded. Do that only after the restore test passes.'

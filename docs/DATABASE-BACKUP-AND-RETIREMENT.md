@@ -14,12 +14,12 @@ The [Pendleton OS repository](https://github.com/pjpendleton/Pendleton-OS) is **
 ## Encrypted database export
 Use [`scripts/backup-pendleton-os-encrypted.sh`](../scripts/backup-pendleton-os-encrypted.sh), based on the official Supabase CLI export workflow.
 
-1. On a trusted machine or secure CI runner with Supabase CLI, Docker, Git, and `age`, generate an `age` encryption keypair. Keep the private key **outside GitHub** and preserve at least two safe copies. Verify the public recipient key.
+1. On a trusted machine with Supabase CLI, Docker, Git, and `age`, generate an `age` encryption keypair in a private folder **outside the repository**. Preserve at least two safe copies. The script derives and verifies the public recipient from that private identity.
 2. Obtain the PostgreSQL connection URL privately from the project Dashboard's **Connect** panel. Never paste it into a GitHub file, chat, or build log.
-3. Set environment variables securely: `SOURCE_DB_URL`, `AGE_RECIPIENT`, and `AGE_IDENTITY_FILE`. The script refuses a URL that does not include the verified Pendleton OS project reference.
-4. Execute `bash scripts/backup-pendleton-os-encrypted.sh`. Set `BACKUP_COMMIT=1 BACKUP_PUSH=1` when the encrypted archive is to be committed and pushed automatically.
-5. The script exports `roles.sql`, `schema.sql`, and `data.sql` in a private temporary folder, streams them to one `*.tar.age` encrypted artifact, verifies decryption using the private key, and writes a `*.sha256` integrity checksum. Only the encrypted artifact and checksum are eligible for Git tracking.
-6. **Restore-test** the archive in an isolated disposable Supabase/PostgreSQL environment. Check every table's row count, RLS and role permissions, and a representative application workflow. An encrypted artifact is not a verified backup until restoration succeeds.
+3. Execute `bash scripts/backup-pendleton-os-encrypted.sh`. If `SOURCE_DB_URL` and `AGE_IDENTITY_FILE` are unset, the script prompts locally; the connection URL is entered with hidden input. Do not put either value in the shell command, shell history, chat, or a file in the repository. The script refuses a URL whose host and username do not match the verified Pendleton OS project reference.
+4. The script deliberately does **not** commit or upload anything. Upload is a separate step after the restore test passes.
+5. The script exports `roles.sql`, `schema.sql`, and `data.sql` in a private temporary folder, streams them to one `*.tar.age` encrypted artifact, decrypts into another private temporary folder, compares every recovered file byte-for-byte, and writes a `*.sha256` integrity checksum. Only the encrypted artifact and checksum are eligible for Git tracking.
+6. **Restore-test** the archive in an isolated disposable local Supabase environment. Check every table's row count, RLS and role permissions, and a representative application workflow. An encrypted artifact is not a verified backup until restoration succeeds. Only after documenting that success may the encrypted archive and checksum be committed and pushed.
 
 ## Limitations and retirement gates
 - A database export may not preserve project-level Auth provider configuration, email settings, secrets, API keys, edge deployments, or external integrations. These need private recovery records.
