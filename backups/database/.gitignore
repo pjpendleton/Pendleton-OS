@@ -1,0 +1,6 @@
+# Public repository: do not commit unencrypted database files.
+*
+!.gitignore
+!README.md
+!*.tar.age
+!*.tar.age.sha256
